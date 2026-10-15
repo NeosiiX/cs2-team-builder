@@ -1,12 +1,14 @@
 import './style.css';
 import playersData from './data/players.json';
-import type { Player, SlotId, SlotDef, Role, TeamInfo, TeamLogo } from './types';
+import type { Player, SlotId, SlotDef, Role, TeamInfo, TeamLogo, ModeId, MatchRecord } from './types';
 import { SLOTS, emptyTeam } from './types';
-import { loadSave, persist } from './storage';
+import { loadSave, persist, HISTORY_LIMIT } from './storage';
 import { computeChemistry, CHEM } from './chemistry';
 import { PACKS, RARITY_LABEL } from './packs';
 import { RARITIES, DUPLICATE_REFUND, effectiveOdds, rollPlayer, fmtPct } from './luck';
 import type { PackDef } from './packs';
+import { MODES, modeById, simulateMatch, averageWinChance, cooldownLeft, fmtCountdown, fmtCooldown } from './play';
+import type { ModeDef } from './play';
 
 const players = playersData as unknown as Player[];
 const byId = new Map(players.map((p) => [p.id, p]));
@@ -17,6 +19,7 @@ let pickerSlot: SlotId | null = null;
 
 const TABS = [
   { id: 'team', label: 'My team', ready: true },
+  { id: 'play', label: 'Play', ready: true },
   { id: 'market', label: 'Marché', ready: false },
   { id: 'collection', label: 'Collection', ready: true },
   { id: 'packs', label: 'Caisses CS2', ready: true },
@@ -33,6 +36,7 @@ const packDialog = $<HTMLDialogElement>('#pack-dialog');
 const coinsEl = $('#coins');
 const coinsDialog = $<HTMLDialogElement>('#coins-dialog');
 const teamDialog = $<HTMLDialogElement>('#team-dialog');
+const matchDialog = $<HTMLDialogElement>('#match-dialog');
 
 const isOwned = (id: string) => save.owned.includes(id);
 
@@ -154,7 +158,8 @@ function renderTeam() {
 
         <button class="btn btn-ghost danger full" data-action="reset">Vider l'équipe</button>
       </aside>
-    </div>`;
+    </div>
+    ${historyHTML()}`;
 }
 
 function renderPlaceholder(label: string) {
@@ -374,6 +379,7 @@ function render() {
   renderAccountBtn();
   renderCoins();
   if (activeTab === 'team') renderTeam();
+  else if (activeTab === 'play') renderPlay();
   else if (activeTab === 'collection') renderCollection();
   else if (activeTab === 'packs') renderPacks();
   else renderPlaceholder(TABS.find((t) => t.id === activeTab)!.label);
@@ -400,7 +406,7 @@ function teamHeaderHTML(): string {
           <h2 class="team-name">${esc(t.name)}</h2>
           <button class="btn btn-ghost btn-sm" data-action="edit-team">Modifier</button>
         </div>
-        <p class="muted team-sub">Les résultats se rempliront quand ton équipe jouera des matchs.</p>
+        <p class="muted team-sub">${played ? `${played} partie${played > 1 ? 's' : ''} jouée${played > 1 ? 's' : ''}` : 'Joue un match dans l\'onglet Play pour remplir tes résultats.'}</p>
       </div>
       <dl class="record">
         <div class="record-box win"><dd>${t.wins}</dd><dt>Victoires</dt></div>
@@ -516,6 +522,229 @@ teamDialog.addEventListener('submit', (e) => {
   teamDialog.close();
   commit();
 });
+
+/* ---------- onglet Play ---------- */
+const fmtCoins = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toLocaleString('fr-FR')}`;
+
+function currentChem() {
+  return computeChemistry(teamPlayers());
+}
+
+function playButtonState(mode: ModeDef): { label: string; disabled: boolean } {
+  if (currentChem().filledStarters < 5) return { label: 'Équipe incomplète', disabled: true };
+  const left = cooldownLeft(mode, save.lastPlayed[mode.id]);
+  if (left > 0) return { label: `Disponible dans ${fmtCountdown(left)}`, disabled: true };
+  if (save.coins < mode.entry) return { label: `Il faut 🪙 ${mode.entry}`, disabled: true };
+  return { label: mode.entry ? `Jouer — 🪙 ${mode.entry}` : 'Jouer', disabled: false };
+}
+
+function modeCardHTML(mode: ModeDef, chem: ReturnType<typeof currentChem>): string {
+  const state = playButtonState(mode);
+  const ready = chem.filledStarters === 5;
+  const chance = ready ? `≈ ${Math.round(averageWinChance(mode, chem.teamOvr) * 100)} %` : '–';
+  return `
+    <article class="panel mode" style="--accent:${mode.accent}">
+      <h3>${esc(mode.name)}</h3>
+      <p class="muted">${esc(mode.tagline)}</p>
+      <ul class="mode-rules">
+        <li><span>Victoire</span><b class="gain">+${mode.win} 🪙</b></li>
+        <li><span>Défaite</span><b>${mode.loss ? `+${mode.loss} 🪙` : '0'}</b></li>
+        <li><span>Ticket d'entrée</span><b>${mode.entry ? `${mode.entry} 🪙` : 'Gratuit'}</b></li>
+        <li><span>Délai entre deux matchs</span><b>${fmtCooldown(mode.cooldownMs)}</b></li>
+        <li><span>Chance de victoire</span><b>${chance}</b></li>
+      </ul>
+      <button class="btn btn-gold full" data-play="${mode.id}" ${state.disabled ? 'disabled' : ''}>${state.label}</button>
+    </article>`;
+}
+
+function renderPlay() {
+  const chem = currentChem();
+  const ready = chem.filledStarters === 5;
+  view.innerHTML = `
+    <div class="section-head">
+      <h2>Play</h2>
+      <span class="muted">${ready ? `Ton équipe : OVR ${chem.teamOvr}` : `Équipe incomplète : ${chem.filledStarters} / 5 joueurs`}</span>
+    </div>
+    ${ready ? '' : `<div class="panel notice"><p>Place tes 5 joueurs dans My team pour pouvoir jouer. Le coach est facultatif.</p>
+      <button class="btn btn-gold" data-goto="team">Composer mon équipe</button></div>`}
+    <div class="mode-grid">${MODES.map((m) => modeCardHTML(m, chem)).join('')}</div>`;
+}
+
+/** Met à jour uniquement les boutons (compte à rebours) sans reconstruire la page. */
+function updatePlayButtons() {
+  view.querySelectorAll<HTMLButtonElement>('[data-play]').forEach((btn) => {
+    const state = playButtonState(modeById(btn.dataset.play as ModeId));
+    if (btn.textContent !== state.label) btn.textContent = state.label;
+    if (btn.disabled !== state.disabled) btn.disabled = state.disabled;
+  });
+}
+
+setInterval(() => {
+  if (activeTab === 'play' && save.profile && !matching && !matchDialog.open) updatePlayButtons();
+}, 1000);
+
+/* ---------- match ---------- */
+let matching = false;
+const MATCH_DURATION = 2600;
+
+function versusHTML(opp: MatchRecord['opponent']): string {
+  return `
+    <div class="versus">
+      <div class="versus-side">${logoHTML(save.teamInfo.logo)}<b>${esc(save.teamInfo.name)}</b></div>
+      <div class="versus-vs">VS</div>
+      <div class="versus-side"><span class="team-logo opp-logo"><span class="team-logo-emoji">${opp.emoji}</span></span><b>${esc(opp.name)}</b><small class="muted">OVR ${opp.ovr}</small></div>
+    </div>`;
+}
+
+function playMatch(id: ModeId) {
+  if (!save.profile || matching) return;
+  const mode = modeById(id);
+  const chem = currentChem();
+  if (chem.filledStarters < 5 || playButtonState(mode).disabled) return;
+
+  // Le résultat, le paiement et le délai sont enregistrés tout de suite : recharger la page n'annule rien.
+  const out = simulateMatch(mode, chem.teamOvr);
+  const record: MatchRecord = {
+    id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    ts: Date.now(),
+    mode: id,
+    opponent: out.opponent,
+    myOvr: chem.teamOvr,
+    myScore: out.myScore,
+    oppScore: out.oppScore,
+    won: out.won,
+    entry: out.entry,
+    payout: out.payout,
+  };
+  save.coins += out.payout - out.entry;
+  save.lastPlayed[id] = record.ts;
+  save.teamInfo.wins += out.won ? 1 : 0;
+  save.teamInfo.losses += out.won ? 0 : 1;
+  save.history.unshift(record);
+  if (save.history.length > HISTORY_LIMIT) save.history.length = HISTORY_LIMIT;
+  persist(save);
+  renderCoins();
+
+  matching = true;
+  matchDialog.innerHTML = `
+    <h2 class="pack-title">${esc(mode.name)}</h2>
+    ${versusHTML(out.opponent)}
+    <div class="match-progress"><div style="animation-duration:${MATCH_DURATION}ms"></div></div>
+    <p class="muted center">Match en cours…</p>`;
+  if (!matchDialog.open) matchDialog.showModal();
+  setTimeout(() => {
+    matching = false;
+    showMatchResult(mode, record);
+  }, MATCH_DURATION);
+}
+
+function showMatchResult(mode: ModeDef, m: MatchRecord) {
+  const net = m.payout - m.entry;
+  const lines = [
+    m.entry ? `<li><span>Ticket d'entrée</span><b>${fmtCoins(-m.entry)} 🪙</b></li>` : '',
+    `<li><span>Gain</span><b>${m.payout ? `${fmtCoins(m.payout)} 🪙` : 'Aucun'}</b></li>`,
+    m.entry ? `<li class="total"><span>Bilan</span><b class="${net >= 0 ? 'pos' : 'neg'}">${fmtCoins(net)} 🪙</b></li>` : '',
+  ].join('');
+  const state = playButtonState(mode);
+  matchDialog.innerHTML = `
+    <h2 class="pack-title">${esc(mode.name)}</h2>
+    ${versusHTML(m.opponent)}
+    <div class="match-result ${m.won ? 'won' : 'lost'}">
+      <div class="match-score">${m.myScore} <span>–</span> ${m.oppScore}</div>
+      <div class="match-verdict">${m.won ? 'Victoire' : 'Défaite'}</div>
+    </div>
+    <ul class="match-rewards">${lines}</ul>
+    <div class="dialog-actions">
+      <button class="btn btn-ghost" data-close>Fermer</button>
+      <button class="btn btn-gold" data-replay="${mode.id}" ${state.disabled ? 'disabled' : ''}>${state.disabled ? state.label : 'Rejouer'}</button>
+    </div>`;
+  render();
+}
+
+matchDialog.addEventListener('cancel', (e) => {
+  if (matching) e.preventDefault();
+});
+
+matchDialog.addEventListener('click', (e) => {
+  if (matching) return;
+  const t = e.target as HTMLElement;
+  if (t === matchDialog || t.hasAttribute('data-close')) return matchDialog.close();
+  const again = t.closest<HTMLButtonElement>('[data-replay]');
+  if (again && !again.disabled) playMatch(again.dataset.replay as ModeId);
+});
+
+/* ---------- historique et stats (My team) ---------- */
+let historyExpanded = false;
+const HISTORY_PREVIEW = 15;
+
+function historyHTML(): string {
+  const h = save.history;
+  if (!h.length) {
+    return `
+      <section class="history">
+        <div class="section-head"><h2>Historique des parties</h2></div>
+        <div class="panel notice"><p>Aucune partie jouée pour l'instant.</p>
+          <button class="btn btn-gold" data-goto="play">Jouer un match</button></div>
+      </section>`;
+  }
+
+  const net = (m: MatchRecord) => m.payout - m.entry;
+  const total = h.length;
+  const totalNet = h.reduce((sum, m) => sum + net(m), 0);
+  let streak = 0;
+  for (const m of h) {
+    if (m.won !== h[0].won) break;
+    streak++;
+  }
+
+  const modeStats = MODES.map((mode) => {
+    const g = h.filter((m) => m.mode === mode.id);
+    const w = g.filter((m) => m.won).length;
+    const gNet = g.reduce((sum, m) => sum + net(m), 0);
+    return `
+      <article class="panel mode-stat" style="--accent:${mode.accent}">
+        <h3>${esc(mode.name)}</h3>
+        ${g.length
+          ? `<div class="mode-stat-main"><b class="win">${w}</b> V <span class="muted">·</span> <b class="loss">${g.length - w}</b> D</div>
+             <div class="mode-stat-sub muted">${Math.round((w / g.length) * 100)} % de victoires · ${fmtCoins(gNet)} 🪙</div>`
+          : '<div class="muted">Aucun match</div>'}
+      </article>`;
+  }).join('');
+
+  const shown = historyExpanded ? h : h.slice(0, HISTORY_PREVIEW);
+  const rows = shown
+    .map((m) => {
+      const n = net(m);
+      return `
+        <tr>
+          <td class="muted">${new Date(m.ts).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+          <td>${esc(modeById(m.mode).name)}</td>
+          <td>${m.opponent.emoji} ${esc(m.opponent.name)} <small class="muted">OVR ${m.opponent.ovr}</small></td>
+          <td class="score">${m.myScore} – ${m.oppScore}</td>
+          <td><span class="result-chip ${m.won ? 'won' : 'lost'}">${m.won ? 'Victoire' : 'Défaite'}</span></td>
+          <td class="coins-cell ${n > 0 ? 'pos' : n < 0 ? 'neg' : ''}">${fmtCoins(n)} 🪙</td>
+        </tr>`;
+    })
+    .join('');
+
+  return `
+    <section class="history">
+      <div class="section-head">
+        <h2>Historique des parties</h2>
+        <span class="muted">${total} partie${total > 1 ? 's' : ''} · série en cours : ${streak} ${h[0].won ? 'victoire' : 'défaite'}${streak > 1 ? 's' : ''} · bilan ${fmtCoins(totalNet)} 🪙</span>
+      </div>
+      <div class="mode-stats">${modeStats}</div>
+      <div class="panel history-table-wrap">
+        <table class="history-table">
+          <thead><tr><th>Date</th><th>Mode</th><th>Adversaire</th><th>Score</th><th>Résultat</th><th>Pièces</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      ${h.length > HISTORY_PREVIEW
+        ? `<button class="btn btn-ghost history-more" data-action="toggle-history">${historyExpanded ? 'Réduire' : `Voir les ${h.length} parties`}</button>`
+        : ''}
+    </section>`;
+}
 
 /* ---------- ajout de pièces ---------- */
 const COIN_AMOUNTS = [100, 500, 1000, 5000];
@@ -690,6 +919,8 @@ view.addEventListener('click', (e) => {
     if (target.closest('[data-action="signup"]')) openAccountDialog();
     return;
   }
+  const playBtn = target.closest<HTMLButtonElement>('[data-play]');
+  if (playBtn) return playBtn.disabled ? undefined : playMatch(playBtn.dataset.play as ModeId);
   const packBtn = target.closest<HTMLElement>('[data-open-pack]');
   if (packBtn) return openPack(packBtn.dataset.openPack!);
   const filter = target.closest<HTMLElement>('[data-filter]');
@@ -702,6 +933,7 @@ view.addEventListener('click', (e) => {
   switch (el.dataset.action) {
     case 'pick': if (slot) openPicker(slot); break;
     case 'edit-team': openTeamDialog(); break;
+    case 'toggle-history': historyExpanded = !historyExpanded; render(); break;
     case 'remove': if (slot) { save.team[slot] = null; commit(); } break;
     case 'reset': save.team = emptyTeam(); commit(); break;
   }

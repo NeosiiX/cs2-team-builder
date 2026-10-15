@@ -64,10 +64,30 @@ export const defaultTeamInfo = (): TeamInfo => ({
   losses: 0,
 });
 
+export type ModeId = 'scrim' | 'showmatch' | 'lan';
+
+export interface MatchRecord {
+  id: string;
+  ts: number;
+  mode: ModeId;
+  opponent: { name: string; emoji: string; ovr: number };
+  /** note de ton équipe au moment du match */
+  myOvr: number;
+  myScore: number;
+  oppScore: number;
+  won: boolean;
+  /** ticket d'entrée payé et gain reçu (le bilan est gain - entrée) */
+  entry: number;
+  payout: number;
+}
+
 export interface SaveData {
   profile: UserProfile | null;
   team: TeamIds;
   teamInfo: TeamInfo;
+  history: MatchRecord[];
+  /** dernier lancement de chaque mode (pour le temps de recharge) */
+  lastPlayed: Partial<Record<ModeId, number>>;
   coins: number;
   /** ids des joueurs débloqués (via les caisses) */
   owned: string[];
