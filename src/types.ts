@@ -45,9 +45,29 @@ export interface UserProfile {
   createdAt: string;
 }
 
+export type TeamLogo =
+  | { kind: 'emoji'; emoji: string; color: string }
+  | { kind: 'image'; dataUrl: string };
+
+export interface TeamInfo {
+  name: string;
+  logo: TeamLogo;
+  /** résultats : pour l'instant à 0, seront alimentés par les futurs matchs */
+  wins: number;
+  losses: number;
+}
+
+export const defaultTeamInfo = (): TeamInfo => ({
+  name: 'Mon équipe',
+  logo: { kind: 'emoji', emoji: '🎯', color: '#e8a838' },
+  wins: 0,
+  losses: 0,
+});
+
 export interface SaveData {
   profile: UserProfile | null;
   team: TeamIds;
+  teamInfo: TeamInfo;
   coins: number;
   /** ids des joueurs débloqués (via les caisses) */
   owned: string[];

@@ -115,6 +115,55 @@ main { padding: 28px 32px 48px; max-width: 1440px; margin: 0 auto; }
 .btn-lg { padding: 14px 34px; font-size: 1.1rem; border-radius: 10px; }
 
 /* --------------------------------------------------------------------------
+   Identité de l'équipe
+   -------------------------------------------------------------------------- */
+.team-head {
+  display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin-bottom: 24px; padding: 18px 22px;
+  border: 1px solid var(--border-strong); border-radius: 18px;
+  background: linear-gradient(100deg, rgba(79, 140, 255, 0.1), transparent 55%), var(--panel);
+}
+.team-logo-btn { background: none; border: none; padding: 0; cursor: pointer; border-radius: 20px; transition: transform 0.15s; }
+.team-logo-btn:hover { transform: scale(1.04); }
+.team-logo {
+  --logo: var(--gold); display: grid; place-items: center; width: 84px; height: 84px; overflow: hidden; border-radius: 20px;
+  background: color-mix(in srgb, var(--logo) 22%, var(--bg-deep)); border: 2px solid var(--logo);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--logo) 35%, transparent);
+}
+.team-logo img { width: 100%; height: 100%; object-fit: cover; }
+.team-logo-emoji { font-size: 2.6rem; line-height: 1; }
+.team-id { flex: 1 1 260px; min-width: 0; }
+.team-name-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.team-name { font-family: var(--font-display); font-size: 2.4rem; font-weight: 800; line-height: 1.05; overflow-wrap: anywhere; }
+.team-sub { font-size: 0.85rem; margin-top: 4px; }
+.btn-sm { padding: 5px 12px; font-size: 0.85rem; }
+.record { display: flex; gap: 12px; margin: 0; }
+.record-box {
+  min-width: 112px; padding: 10px 16px; border-radius: 12px; text-align: center;
+  background: var(--bg-deep); border: 1px solid var(--border);
+}
+.record-box dd { margin: 0; font-family: var(--font-display); font-size: 2rem; font-weight: 800; line-height: 1; }
+.record-box dt { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+.record-box.win dd { color: var(--green); }
+.record-box.loss dd { color: var(--red); }
+
+.dialog-team { width: min(480px, 94vw); }
+.field { display: grid; gap: 8px; margin-bottom: 16px; }
+.field > span { font-weight: 600; font-size: 0.9rem; }
+.logo-preview { display: flex; justify-content: center; padding: 6px 0; }
+.emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.emoji-btn {
+  font-size: 1.5rem; padding: 6px 0; cursor: pointer; border-radius: 10px; background: var(--bg-deep);
+  border: 1px solid var(--border); transition: border-color 0.15s, background 0.15s;
+}
+.emoji-btn:hover { border-color: var(--blue-hi); }
+.emoji-btn.selected { border-color: var(--gold); background: rgba(232, 168, 56, 0.14); }
+.color-row { display: flex; gap: 8px; }
+.color-btn { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; background: var(--c); border: 2px solid transparent; outline: 1px solid var(--border-strong); outline-offset: 2px; }
+.color-btn.selected { border-color: var(--text); }
+.file-btn { justify-self: start; cursor: pointer; }
+.field-error { color: var(--red); font-size: 0.82rem; }
+
+/* --------------------------------------------------------------------------
    Onglet My team : tableau tactique
    -------------------------------------------------------------------------- */
 .team-layout { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 24px; align-items: start; }
@@ -351,4 +400,7 @@ main { padding: 28px 32px 48px; max-width: 1440px; margin: 0 auto; }
   .lineup:not(.lineup-coach) .slot { scroll-snap-align: start; }
   .lineup-coach { grid-template-columns: minmax(0, 150px); justify-content: center; }
   .lineup-coach .slot { grid-column: auto; }
+  .team-head { padding: 16px; }
+  .record { width: 100%; }
+  .record-box { flex: 1; min-width: 0; }
 }

@@ -1,6 +1,6 @@
 import './style.css';
 import playersData from './data/players.json';
-import type { Player, SlotId, SlotDef, Role } from './types';
+import type { Player, SlotId, SlotDef, Role, TeamInfo, TeamLogo } from './types';
 import { SLOTS, emptyTeam } from './types';
 import { loadSave, persist } from './storage';
 import { computeChemistry, CHEM } from './chemistry';
@@ -32,6 +32,7 @@ const pickerDialog = $<HTMLDialogElement>('#picker-dialog');
 const packDialog = $<HTMLDialogElement>('#pack-dialog');
 const coinsEl = $('#coins');
 const coinsDialog = $<HTMLDialogElement>('#coins-dialog');
+const teamDialog = $<HTMLDialogElement>('#team-dialog');
 
 const isOwned = (id: string) => save.owned.includes(id);
 
@@ -124,6 +125,7 @@ function renderTeam() {
     : '<li class="muted">Aucune paire de vrais coéquipiers</li>';
 
   view.innerHTML = `
+    ${teamHeaderHTML()}
     <div class="team-layout">
       <div class="board">
         <div class="lineup">${starters}</div>
@@ -377,6 +379,144 @@ function render() {
   else renderPlaceholder(TABS.find((t) => t.id === activeTab)!.label);
 }
 
+/* ---------- identité de l'équipe (nom, logo, résultats) ---------- */
+const LOGO_EMOJIS = ['🎯', '🔥', '⚡', '🐺', '🦅', '🐉', '🦁', '💀', '🛡️', '⚔️', '🚀', '👑'];
+const LOGO_COLORS = ['#e8a838', '#4f8cff', '#9b7bff', '#3ddc97', '#ff6b7a', '#e8eef9'];
+
+function logoHTML(logo: TeamLogo): string {
+  if (logo.kind === 'image') return `<span class="team-logo"><img src="${esc(logo.dataUrl)}" alt="" /></span>`;
+  return `<span class="team-logo" style="--logo:${esc(logo.color)}"><span class="team-logo-emoji">${logo.emoji}</span></span>`;
+}
+
+function teamHeaderHTML(): string {
+  const t = save.teamInfo;
+  const played = t.wins + t.losses;
+  const rate = played ? `${Math.round((t.wins / played) * 100)} %` : '–';
+  return `
+    <section class="team-head">
+      <button class="team-logo-btn" data-action="edit-team" title="Modifier le logo" aria-label="Modifier le logo">${logoHTML(t.logo)}</button>
+      <div class="team-id">
+        <div class="team-name-row">
+          <h2 class="team-name">${esc(t.name)}</h2>
+          <button class="btn btn-ghost btn-sm" data-action="edit-team">Modifier</button>
+        </div>
+        <p class="muted team-sub">Les résultats se rempliront quand ton équipe jouera des matchs.</p>
+      </div>
+      <dl class="record">
+        <div class="record-box win"><dd>${t.wins}</dd><dt>Victoires</dt></div>
+        <div class="record-box loss"><dd>${t.losses}</dd><dt>Défaites</dt></div>
+        <div class="record-box"><dd>${rate}</dd><dt>Taux de victoire</dt></div>
+      </dl>
+    </section>`;
+}
+
+let teamDraft: TeamInfo | null = null;
+
+function openTeamDialog() {
+  teamDraft = structuredClone(save.teamInfo);
+  teamDialog.innerHTML = `
+    <h2>Mon équipe</h2>
+    <form id="team-form">
+      <label class="field"><span>Nom de l'équipe</span>
+        <input id="team-name" name="name" maxlength="24" required autocomplete="off" value="${esc(teamDraft.name)}" />
+      </label>
+
+      <div class="field"><span>Logo</span>
+        <div class="logo-preview" id="logo-preview"></div>
+        <div class="emoji-grid" id="emoji-grid">
+          ${LOGO_EMOJIS.map((e) => `<button type="button" class="emoji-btn" data-emoji="${e}" aria-label="Emblème ${e}">${e}</button>`).join('')}
+        </div>
+        <div class="color-row" id="color-row">
+          ${LOGO_COLORS.map((c) => `<button type="button" class="color-btn" data-color="${c}" style="--c:${c}" aria-label="Couleur ${c}"></button>`).join('')}
+        </div>
+        <label class="btn btn-ghost btn-sm file-btn">Importer une image
+          <input id="logo-file" type="file" accept="image/*" hidden />
+        </label>
+        <p class="muted field-error" id="logo-error" hidden>Image illisible : essaie un PNG ou un JPG.</p>
+      </div>
+
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" data-close>Annuler</button>
+        <button type="submit" class="btn btn-gold">Enregistrer</button>
+      </div>
+    </form>`;
+  refreshTeamDialog();
+  teamDialog.showModal();
+  $<HTMLInputElement>('#team-name').select();
+}
+
+function refreshTeamDialog() {
+  if (!teamDraft) return;
+  const logo = teamDraft.logo;
+  $('#logo-preview').innerHTML = logoHTML(logo);
+  teamDialog.querySelectorAll<HTMLElement>('.emoji-btn').forEach((b) =>
+    b.classList.toggle('selected', logo.kind === 'emoji' && b.dataset.emoji === logo.emoji));
+  teamDialog.querySelectorAll<HTMLElement>('.color-btn').forEach((b) =>
+    b.classList.toggle('selected', logo.kind === 'emoji' && b.dataset.color === logo.color));
+}
+
+/** Recadre l'image en carré 160×160 pour qu'elle reste légère dans la sauvegarde. */
+function imageToLogoData(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const size = 160;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const side = Math.min(img.width, img.height);
+      canvas.getContext('2d')!.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image illisible')); };
+    img.src = url;
+  });
+}
+
+teamDialog.addEventListener('click', (e) => {
+  const t = e.target as HTMLElement;
+  if (t === teamDialog || t.hasAttribute('data-close')) return teamDialog.close();
+  if (!teamDraft) return;
+  const emoji = t.closest<HTMLElement>('[data-emoji]');
+  if (emoji) {
+    const color = teamDraft.logo.kind === 'emoji' ? teamDraft.logo.color : LOGO_COLORS[0];
+    teamDraft.logo = { kind: 'emoji', emoji: emoji.dataset.emoji!, color };
+    return refreshTeamDialog();
+  }
+  const color = t.closest<HTMLElement>('[data-color]');
+  if (color) {
+    const current = teamDraft.logo.kind === 'emoji' ? teamDraft.logo.emoji : LOGO_EMOJIS[0];
+    teamDraft.logo = { kind: 'emoji', emoji: current, color: color.dataset.color! };
+    refreshTeamDialog();
+  }
+});
+
+teamDialog.addEventListener('change', async (e) => {
+  const input = e.target as HTMLInputElement;
+  if (input.id !== 'logo-file' || !input.files?.[0] || !teamDraft) return;
+  const error = $('#logo-error');
+  try {
+    teamDraft.logo = { kind: 'image', dataUrl: await imageToLogoData(input.files[0]) };
+    error.hidden = true;
+    refreshTeamDialog();
+  } catch {
+    error.hidden = false;
+  }
+  input.value = '';
+});
+
+teamDialog.addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!teamDraft) return;
+  const name = $<HTMLInputElement>('#team-name').value.trim();
+  if (!name) return;
+  save.teamInfo = { ...save.teamInfo, name: name.slice(0, 24), logo: teamDraft.logo };
+  teamDraft = null;
+  teamDialog.close();
+  commit();
+});
+
 /* ---------- ajout de pièces ---------- */
 const COIN_AMOUNTS = [100, 500, 1000, 5000];
 
@@ -561,6 +701,7 @@ view.addEventListener('click', (e) => {
   const slot = el.dataset.slot as SlotId | undefined;
   switch (el.dataset.action) {
     case 'pick': if (slot) openPicker(slot); break;
+    case 'edit-team': openTeamDialog(); break;
     case 'remove': if (slot) { save.team[slot] = null; commit(); } break;
     case 'reset': save.team = emptyTeam(); commit(); break;
   }
