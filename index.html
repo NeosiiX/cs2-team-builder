@@ -11,7 +11,10 @@
         <span class="brand-mark">◆</span>
         <span>CS2 <b>TEAM BUILDER</b></span>
       </div>
-      <button id="account-btn" class="btn btn-gold" type="button">Créer son compte</button>
+      <div class="topbar-right">
+        <div class="coins" title="Tes pièces">🪙 <b id="coins">0</b></div>
+        <button id="account-btn" class="btn btn-gold" type="button">Créer son compte</button>
+      </div>
     </header>
 
     <nav class="tabs" id="tabs" aria-label="Navigation principale"></nav>
@@ -19,6 +22,7 @@
 
     <dialog id="account-dialog" class="dialog"></dialog>
     <dialog id="picker-dialog" class="dialog dialog-wide"></dialog>
+    <dialog id="pack-dialog" class="dialog dialog-pack"></dialog>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

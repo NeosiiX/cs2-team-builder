@@ -48,4 +48,7 @@ export interface UserProfile {
 export interface SaveData {
   profile: UserProfile | null;
   team: TeamIds;
+  coins: number;
+  /** ids des joueurs débloqués (via les caisses) */
+  owned: string[];
 }

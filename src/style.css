@@ -129,7 +129,7 @@ main { padding: 28px; max-width: 1300px; margin: 0 auto; }
   margin: auto; background: var(--panel); color: var(--text); border: 1px solid var(--border);
   border-radius: 14px; padding: 24px; width: min(420px, 92vw);
 }
-.dialog-wide { width: min(640px, 94vw); max-height: 85vh; }
+.dialog-wide { width: min(900px, 94vw); max-height: 90vh; }
 .dialog::backdrop { background: rgba(2, 6, 12, 0.75); backdrop-filter: blur(3px); }
 .dialog h2 { margin-bottom: 8px; }
 .dialog p { margin-bottom: 10px; }
@@ -141,21 +141,87 @@ main { padding: 28px; max-width: 1300px; margin: 0 auto; }
 
 .picker-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .picker-filters { display: grid; grid-template-columns: 1fr 150px; gap: 10px; margin-bottom: 12px; }
-.picker-list { list-style: none; padding: 0; max-height: 55vh; overflow-y: auto; display: grid; gap: 6px; }
-.picker-row {
-  width: 100%; display: grid; grid-template-columns: 40px 44px 26px 1fr auto; gap: 10px; align-items: center;
-  background: #0b0e14; border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px;
-  padding: 8px 10px; cursor: pointer; text-align: left;
+.picker-list {
+  list-style: none; padding: 4px; max-height: 62vh; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px;
 }
-.picker-row.silver { border-left-color: #9ca3af; }
-.picker-row.gold { border-left-color: var(--gold); }
-.picker-row.legend { border-left-color: #a855f7; }
-.picker-row:hover { background: rgba(148, 163, 184, 0.1); }
-.pr-ovr { font-weight: 800; }
-.pr-role { font-size: 0.75rem; font-weight: 700; color: var(--muted); }
-.pr-name { font-weight: 700; }
-.pr-team { color: var(--muted); font-size: 0.8rem; }
+.picker-card {
+  display: block; width: 100%; background: none; border: none; padding: 0; cursor: pointer;
+  border-radius: 14px; transition: transform 0.15s, filter 0.15s;
+}
+.picker-card:hover, .picker-card:focus-visible { transform: translateY(-4px) scale(1.03); filter: brightness(1.08); outline: none; }
+.picker-card:focus-visible .card { box-shadow: 0 0 0 3px var(--blue), 0 8px 24px rgba(0, 0, 0, 0.45); }
+.picker-card .ovr { font-size: 1.6rem; }
+.picker-card .nick { font-size: 0.95rem; }
+.picker-card .portrait .initials { font-size: 2.6rem; }
+.picker-empty { grid-column: 1 / -1; text-align: center; color: var(--muted); padding: 32px 16px; display: grid; gap: 14px; justify-items: center; }
 
 @media (max-width: 960px) {
   .team-layout { grid-template-columns: 1fr; }
 }
+
+/* Topbar : pièces */
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+.coins {
+  display: flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
+  background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.35); color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+.btn:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.4); }
+.center { text-align: center; }
+
+/* En-têtes de section + grille collection */
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.section-head h2 { font-size: 1.1rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 20px; }
+
+/* Caisses */
+.pack-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; }
+.pack { --accent: var(--gold); text-align: center; border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: radial-gradient(260px 160px at 50% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent), var(--panel); }
+.pack-crate { font-size: 4.2rem; line-height: 1; margin: 6px 0 10px; filter: drop-shadow(0 6px 14px color-mix(in srgb, var(--accent) 60%, transparent)); }
+.pack h3 { font-size: 1.15rem; letter-spacing: 0.05em; color: var(--accent); }
+.pack > p { margin: 4px 0 16px; font-size: 0.85rem; }
+.odds { display: grid; gap: 8px; text-align: left; }
+.odds-row { display: grid; grid-template-columns: 92px 1fr 40px; align-items: center; gap: 10px; font-size: 0.8rem; }
+.odds-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.odds-bar { height: 8px; background: #0b0e14; border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
+.odds-bar div { height: 100%; border-radius: 999px; }
+.odds-row.silver .odds-bar div { background: #9ca3af; }
+.odds-row.gold .odds-bar div { background: var(--gold); }
+.odds-row.legend .odds-bar div { background: #a855f7; }
+.odds-row.legend .odds-label { color: #c084fc; }
+.odds-row.gold .odds-label { color: var(--gold); }
+
+/* Ouverture de caisse */
+.dialog-pack { width: min(760px, 94vw); overflow: hidden; }
+.pack-title { text-align: center; letter-spacing: 0.1em; text-transform: uppercase; }
+.roll-window { position: relative; overflow: hidden; margin: 18px 0; border-radius: 12px; border: 1px solid var(--border); background: #0b0e14; }
+.roll-window::before, .roll-window::after { content: ''; position: absolute; top: 0; bottom: 0; width: 80px; z-index: 2; pointer-events: none; }
+.roll-window::before { left: 0; background: linear-gradient(90deg, #0b0e14, transparent); }
+.roll-window::after { right: 0; background: linear-gradient(270deg, #0b0e14, transparent); }
+.roll-marker { position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; background: var(--gold); box-shadow: 0 0 14px var(--gold); z-index: 3; }
+.roll-track { display: flex; gap: 10px; padding: 12px 10px; will-change: transform; }
+.roll-item {
+  flex: 0 0 120px; height: 150px; border-radius: 10px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px; text-align: center; padding: 6px;
+  border-bottom: 4px solid; background: #121721;
+}
+.roll-item b { font-size: 1.6rem; }
+.roll-item span { font-weight: 800; font-size: 0.85rem; text-transform: uppercase; overflow-wrap: anywhere; }
+.roll-item small { color: var(--muted); font-weight: 700; }
+.roll-item.silver { border-color: #9ca3af; background: linear-gradient(180deg, #121721, rgba(156, 163, 175, 0.18)); }
+.roll-item.gold { border-color: var(--gold); background: linear-gradient(180deg, #121721, rgba(251, 191, 36, 0.2)); }
+.roll-item.legend { border-color: #a855f7; background: linear-gradient(180deg, #121721, rgba(168, 85, 247, 0.28)); }
+
+.reveal { display: grid; justify-items: center; gap: 12px; padding: 8px 0; }
+.reveal-rarity { font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; font-size: 0.85rem; }
+.reveal.silver .reveal-rarity { color: #9ca3af; }
+.reveal.gold .reveal-rarity { color: var(--gold); }
+.reveal.legend .reveal-rarity { color: #c084fc; }
+.reveal-card { width: 220px; animation: reveal-pop 0.6s cubic-bezier(0.2, 1.4, 0.3, 1) both; }
+.reveal.gold .reveal-card { filter: drop-shadow(0 0 22px rgba(251, 191, 36, 0.55)); }
+.reveal.legend .reveal-card { filter: drop-shadow(0 0 30px rgba(168, 85, 247, 0.75)); }
+.reveal-status { margin: 0; }
+@keyframes reveal-pop { from { opacity: 0; transform: scale(0.6) rotate(-6deg); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .reveal-card { animation: none; } }

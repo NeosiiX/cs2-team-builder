@@ -4,6 +4,8 @@ import type { Player, SlotId, Role } from './types';
 import { SLOTS, emptyTeam } from './types';
 import { loadSave, persist } from './storage';
 import { computeChemistry, CHEM } from './chemistry';
+import { PACKS, RARITY_LABEL, DUPLICATE_REFUND, rollPlayer } from './packs';
+import type { PackDef } from './packs';
 
 const players = playersData as unknown as Player[];
 const byId = new Map(players.map((p) => [p.id, p]));
@@ -15,8 +17,8 @@ let pickerSlot: SlotId | null = null;
 const TABS = [
   { id: 'team', label: 'My team', ready: true },
   { id: 'market', label: 'Marché', ready: false },
-  { id: 'collection', label: 'Collection', ready: false },
-  { id: 'packs', label: 'Caisses CS2', ready: false },
+  { id: 'collection', label: 'Collection', ready: true },
+  { id: 'packs', label: 'Caisses CS2', ready: true },
   { id: 'ranking', label: 'Classement', ready: false },
 ];
 
@@ -26,6 +28,10 @@ const tabsEl = $('#tabs');
 const accountBtn = $<HTMLButtonElement>('#account-btn');
 const accountDialog = $<HTMLDialogElement>('#account-dialog');
 const pickerDialog = $<HTMLDialogElement>('#picker-dialog');
+const packDialog = $<HTMLDialogElement>('#pack-dialog');
+const coinsEl = $('#coins');
+
+const isOwned = (id: string) => save.owned.includes(id);
 
 /* ---------- helpers ---------- */
 const esc = (s: string) =>
@@ -159,10 +165,154 @@ function renderAccountBtn() {
   accountBtn.classList.toggle('btn-ghost', !!save.profile);
 }
 
+function renderCoins() {
+  coinsEl.textContent = save.coins.toLocaleString('fr-FR');
+}
+
+/* ---------- onglet Collection ---------- */
+function renderCollection() {
+  const mine = players.filter((p) => isOwned(p.id)).sort((a, b) => b.ovr - a.ovr);
+  const header = `
+    <div class="section-head">
+      <h2>Ma collection</h2>
+      <span class="muted">${mine.length} / ${players.length} joueurs débloqués</span>
+    </div>`;
+  if (!mine.length) {
+    view.innerHTML = `${header}
+      <div class="panel placeholder">
+        <p>Tu n'as encore aucun joueur.</p>
+        <button class="btn btn-gold" data-goto="packs" style="margin-top:16px">Ouvrir une caisse</button>
+      </div>`;
+    return;
+  }
+  view.innerHTML = `${header}<div class="card-grid">${mine.map((p) => cardHTML(p, null)).join('')}</div>`;
+}
+
+/* ---------- onglet Caisses ---------- */
+const RARITIES = ['legend', 'gold', 'silver'] as const;
+
+function packCardHTML(pack: PackDef): string {
+  const can = save.coins >= pack.price;
+  const odds = RARITIES.map(
+    (r) => `
+      <div class="odds-row ${r}">
+        <span class="odds-label">${RARITY_LABEL[r]}</span>
+        <div class="odds-bar"><div style="width:${pack.odds[r]}%"></div></div>
+        <b>${pack.odds[r]}%</b>
+      </div>`,
+  ).join('');
+  return `
+    <article class="panel pack" style="--accent:${pack.accent}">
+      <div class="pack-crate">📦</div>
+      <h3>${esc(pack.name)}</h3>
+      <p class="muted">${esc(pack.tagline)}</p>
+      <div class="odds">${odds}</div>
+      <button class="btn btn-gold full" data-open-pack="${pack.id}" ${can ? '' : 'disabled'}>
+        Ouvrir — 🪙 ${pack.price}
+      </button>
+    </article>`;
+}
+
+function renderPacks() {
+  view.innerHTML = `
+    <div class="section-head">
+      <h2>Caisses CS2</h2>
+      <span class="muted">Un joueur déjà possédé est revendu : 🪙 ${DUPLICATE_REFUND.silver} / ${DUPLICATE_REFUND.gold} / ${DUPLICATE_REFUND.legend} (Silver / Gold / Légende)</span>
+    </div>
+    <div class="pack-grid">${PACKS.map(packCardHTML).join('')}</div>`;
+}
+
+/* ---------- ouverture de caisse ---------- */
+let spinning = false;
+const STRIP_LEN = 46;
+const WIN_INDEX = 38;
+
+function tileHTML(p: Player): string {
+  return `<div class="roll-item ${p.rarity}"><b>${p.ovr}</b><span>${esc(p.nickname)}</span><small>${p.role}</small></div>`;
+}
+
+function openPack(packId: string) {
+  const pack = PACKS.find((p) => p.id === packId);
+  if (!pack || spinning || save.coins < pack.price) return;
+
+  // Le tirage et le paiement sont appliqués tout de suite (pas de triche en rafraîchissant)
+  const winner = rollPlayer(pack, players);
+  const duplicate = isOwned(winner.id);
+  save.coins -= pack.price;
+  if (duplicate) save.coins += DUPLICATE_REFUND[winner.rarity];
+  else save.owned.push(winner.id);
+  persist(save);
+  renderCoins();
+
+  const strip = Array.from({ length: STRIP_LEN }, (_, i) => (i === WIN_INDEX ? winner : rollPlayer(pack, players)));
+
+  spinning = true;
+  packDialog.innerHTML = `
+    <h2 class="pack-title">${esc(pack.name)}</h2>
+    <div class="roll-window">
+      <div class="roll-marker"></div>
+      <div class="roll-track" id="roll-track">${strip.map(tileHTML).join('')}</div>
+    </div>
+    <p class="muted center">Ouverture…</p>`;
+  if (!packDialog.open) packDialog.showModal();
+
+  const track = $('#roll-track');
+  const windowEl = track.parentElement!;
+  const finish = () => {
+    if (!spinning) return;
+    spinning = false;
+    showPackResult(pack, winner, duplicate);
+  };
+
+  requestAnimationFrame(() => {
+    const tile = track.children[WIN_INDEX] as HTMLElement;
+    const jitter = (Math.random() - 0.5) * tile.offsetWidth * 0.6;
+    const target = tile.offsetLeft + tile.offsetWidth / 2 - windowEl.clientWidth / 2 + jitter;
+    track.style.transition = 'transform 5s cubic-bezier(0.12, 0.7, 0.12, 1)';
+    track.style.transform = `translateX(${-target}px)`;
+    track.addEventListener('transitionend', finish, { once: true });
+    setTimeout(finish, 5600); // filet de sécurité
+  });
+}
+
+function showPackResult(pack: PackDef, p: Player, duplicate: boolean) {
+  const can = save.coins >= pack.price;
+  packDialog.innerHTML = `
+    <div class="reveal ${p.rarity}">
+      <div class="reveal-rarity">${RARITY_LABEL[p.rarity]}</div>
+      <div class="reveal-card">${cardHTML(p, null)}</div>
+      <p class="reveal-status">${
+        duplicate
+          ? `Doublon — revendu <b class="bonus">+🪙 ${DUPLICATE_REFUND[p.rarity]}</b>`
+          : '<b class="bonus">Nouveau joueur débloqué !</b>'
+      }</p>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-ghost" data-close>Fermer</button>
+      <button class="btn btn-gold" data-again="${pack.id}" ${can ? '' : 'disabled'}>Rouvrir — 🪙 ${pack.price}</button>
+    </div>`;
+  render();
+}
+
+packDialog.addEventListener('cancel', (e) => {
+  if (spinning) e.preventDefault();
+});
+
+packDialog.addEventListener('click', (e) => {
+  if (spinning) return;
+  const t = e.target as HTMLElement;
+  if (t === packDialog || t.hasAttribute('data-close')) return packDialog.close();
+  const again = t.closest<HTMLElement>('[data-again]');
+  if (again && !(again as HTMLButtonElement).disabled) openPack(again.dataset.again!);
+});
+
 function render() {
   renderTabs();
   renderAccountBtn();
+  renderCoins();
   if (activeTab === 'team') renderTeam();
+  else if (activeTab === 'collection') renderCollection();
+  else if (activeTab === 'packs') renderPacks();
   else renderPlaceholder(TABS.find((t) => t.id === activeTab)!.label);
 }
 
@@ -248,24 +398,28 @@ function renderPickerList() {
   );
   const q = pickerQuery.toLowerCase();
   const list = players
+    .filter((p) => isOwned(p.id))
     .filter((p) => !used.has(p.id))
     .filter((p) => pickerRole === 'ALL' || p.role === pickerRole)
     .filter((p) => !q || p.nickname.toLowerCase().includes(q) || p.team.toLowerCase().includes(q))
     .sort((a, b) => Number(slot.role && b.role === slot.role) - Number(slot.role && a.role === slot.role) || b.ovr - a.ovr);
 
+  let empty = '';
+  if (!save.owned.length) {
+    empty = `<li class="picker-empty">Tu n'as encore débloqué aucun joueur.
+      <button class="btn btn-gold" data-goto="packs">Ouvrir une caisse</button></li>`;
+  } else if (!list.length) {
+    empty = '<li class="picker-empty">Aucun joueur ne correspond à ta recherche.</li>';
+  }
+
   $('#picker-list').innerHTML =
     list
-      .map(
-        (p) => `
-      <li><button class="picker-row ${p.rarity}" data-pick="${esc(p.id)}">
-        <span class="pr-ovr">${p.ovr}</span>
-        <span class="pr-role ${slot.role && p.role === slot.role ? 'role-ok' : ''}">${p.role}</span>
-        ${flag(p.countryCode)}
-        <span class="pr-name">${esc(p.nickname)}</span>
-        <span class="pr-team">${esc(p.team)} · ${fmtPeriod(p.period)}</span>
-      </button></li>`,
-      )
-      .join('') || '<li class="muted pad">Aucun joueur disponible</li>';
+      .map((p) => {
+        // vert/rouge sur le rôle : bien placé ou non (rien pour le coach)
+        const fit = slot.role ? p.role === slot.role : null;
+        return `<li><button class="picker-card" data-pick="${esc(p.id)}" title="${esc(p.nickname)}">${cardHTML(p, fit)}</button></li>`;
+      })
+      .join('') + empty;
 }
 
 pickerDialog.addEventListener('input', (e) => {
@@ -278,6 +432,12 @@ pickerDialog.addEventListener('input', (e) => {
 pickerDialog.addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
   if (t === pickerDialog || t.hasAttribute('data-close')) return pickerDialog.close();
+  const goto = t.closest<HTMLElement>('[data-goto]');
+  if (goto) {
+    pickerDialog.close();
+    activeTab = goto.dataset.goto!;
+    return render();
+  }
   const row = t.closest<HTMLElement>('[data-pick]');
   if (row && pickerSlot) {
     save.team[pickerSlot] = row.dataset.pick!;
@@ -295,7 +455,12 @@ tabsEl.addEventListener('click', (e) => {
 });
 
 view.addEventListener('click', (e) => {
-  const el = (e.target as HTMLElement).closest<HTMLElement>('[data-action]');
+  const target = e.target as HTMLElement;
+  const packBtn = target.closest<HTMLElement>('[data-open-pack]');
+  if (packBtn) return openPack(packBtn.dataset.openPack!);
+  const goto = target.closest<HTMLElement>('[data-goto]');
+  if (goto) { activeTab = goto.dataset.goto!; return render(); }
+  const el = target.closest<HTMLElement>('[data-action]');
   if (!el) return;
   const slot = el.dataset.slot as SlotId | undefined;
   switch (el.dataset.action) {
