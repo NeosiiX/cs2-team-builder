@@ -1,0 +1,816 @@
+[
+  {
+    "id": "donk",
+    "nickname": "donk",
+    "ovr": 99,
+    "role": "RIF",
+    "countryCode": "RU",
+    "team": "Spirit",
+    "period": {
+      "from": 2023
+    },
+    "rarity": "legend",
+    "stats": {
+      "aim": 94,
+      "utl": 62,
+      "pos": 86,
+      "clu": 88
+    },
+    "dataSource": "estimated",
+    "realName": "Danil Kryshkovets"
+  },
+  {
+    "id": "s1mple",
+    "nickname": "s1mple",
+    "ovr": 99,
+    "role": "AWP",
+    "countryCode": "UA",
+    "team": "NAVI",
+    "period": {
+      "from": 2016,
+      "to": 2023
+    },
+    "rarity": "legend",
+    "stats": {
+      "aim": 85,
+      "utl": 67,
+      "pos": 79,
+      "clu": 99
+    },
+    "dataSource": "estimated",
+    "realName": "Oleksandr Kostyliev"
+  },
+  {
+    "id": "zywoo",
+    "nickname": "ZywOo",
+    "ovr": 98,
+    "role": "AWP",
+    "countryCode": "FR",
+    "team": "Vitality",
+    "period": {
+      "from": 2018
+    },
+    "rarity": "legend",
+    "stats": {
+      "aim": 83,
+      "utl": 70,
+      "pos": 84,
+      "clu": 96
+    },
+    "dataSource": "estimated",
+    "realName": "Mathieu Herbaut"
+  },
+  {
+    "id": "m0nesy",
+    "nickname": "m0NESY",
+    "ovr": 88,
+    "role": "AWP",
+    "countryCode": "RU",
+    "team": "G2",
+    "period": {
+      "from": 2021
+    },
+    "rarity": "legend",
+    "stats": {
+      "aim": 81,
+      "utl": 68,
+      "pos": 79,
+      "clu": 91
+    },
+    "dataSource": "estimated",
+    "realName": "Ilya Osipov"
+  },
+  {
+    "id": "sh1ro",
+    "nickname": "sh1ro",
+    "ovr": 86,
+    "role": "AWP",
+    "countryCode": "RU",
+    "team": "Cloud9",
+    "period": {
+      "from": 2019
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 77,
+      "utl": 76,
+      "pos": 94,
+      "clu": 94
+    },
+    "dataSource": "estimated",
+    "realName": "Dmitriy Sokolov"
+  },
+  {
+    "id": "niko",
+    "nickname": "NiKo",
+    "ovr": 84,
+    "role": "RIF",
+    "countryCode": "BA",
+    "team": "G2",
+    "period": {
+      "from": 2013
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 88,
+      "utl": 70,
+      "pos": 74,
+      "clu": 82
+    },
+    "dataSource": "estimated",
+    "realName": "Nikola Kovač"
+  },
+  {
+    "id": "ropz",
+    "nickname": "ropz",
+    "ovr": 82,
+    "role": "LRK",
+    "countryCode": "EE",
+    "team": "FaZe Clan",
+    "period": {
+      "from": 2017
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 83,
+      "utl": 77,
+      "pos": 90,
+      "clu": 88
+    },
+    "dataSource": "estimated",
+    "realName": "Robin Kool"
+  },
+  {
+    "id": "broky",
+    "nickname": "broky",
+    "ovr": 80,
+    "role": "AWP",
+    "countryCode": "LV",
+    "team": "FaZe Clan",
+    "period": {
+      "from": 2019
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 76,
+      "utl": 70,
+      "pos": 78,
+      "clu": 86
+    },
+    "dataSource": "estimated",
+    "realName": "Helvijs Saukants"
+  },
+  {
+    "id": "coldzera",
+    "nickname": "coldzera",
+    "ovr": 80,
+    "role": "RIF",
+    "countryCode": "BR",
+    "team": "SK Gaming",
+    "period": {
+      "from": 2014,
+      "to": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 79,
+      "utl": 72,
+      "pos": 76,
+      "clu": 84
+    },
+    "dataSource": "estimated",
+    "realName": "Marcelo David"
+  },
+  {
+    "id": "device",
+    "nickname": "device",
+    "ovr": 80,
+    "role": "AWP",
+    "countryCode": "DK",
+    "team": "Astralis",
+    "period": {
+      "from": 2013
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 83,
+      "utl": 68,
+      "pos": 79,
+      "clu": 83
+    },
+    "dataSource": "estimated",
+    "realName": "Nicolai Reedtz"
+  },
+  {
+    "id": "b1t",
+    "nickname": "b1t",
+    "ovr": 79,
+    "role": "RIF",
+    "countryCode": "UA",
+    "team": "NAVI",
+    "period": {
+      "from": 2019
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 85,
+      "utl": 73,
+      "pos": 79,
+      "clu": 79
+    },
+    "dataSource": "estimated",
+    "realName": "Valeriy Vakhovskiy"
+  },
+  {
+    "id": "frozen",
+    "nickname": "frozen",
+    "ovr": 79,
+    "role": "RIF",
+    "countryCode": "SK",
+    "team": "MOUZ",
+    "period": {
+      "from": 2018
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 84,
+      "utl": 72,
+      "pos": 78,
+      "clu": 79
+    },
+    "dataSource": "estimated",
+    "realName": "David Čerňanský"
+  },
+  {
+    "id": "elige",
+    "nickname": "EliGE",
+    "ovr": 78,
+    "role": "RIF",
+    "countryCode": "US",
+    "team": "Team Liquid",
+    "period": {
+      "from": 2015
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 83,
+      "utl": 72,
+      "pos": 73,
+      "clu": 81
+    },
+    "dataSource": "estimated",
+    "realName": "Jonathan Jablonowski"
+  },
+  {
+    "id": "f0rest",
+    "nickname": "f0rest",
+    "ovr": 78,
+    "role": "RIF",
+    "countryCode": "SE",
+    "team": "NiP",
+    "period": {
+      "from": 2012,
+      "to": 2022
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 82,
+      "utl": 68,
+      "pos": 73,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Patrik Lindberg"
+  },
+  {
+    "id": "olofmeister",
+    "nickname": "olofmeister",
+    "ovr": 78,
+    "role": "RIF",
+    "countryCode": "SE",
+    "team": "Fnatic",
+    "period": {
+      "from": 2013,
+      "to": 2021
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 82,
+      "utl": 72,
+      "pos": 72,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Olof Kajbjer Gustafsson"
+  },
+  {
+    "id": "snax",
+    "nickname": "Snax",
+    "ovr": 78,
+    "role": "IGL",
+    "countryCode": "PL",
+    "team": "Virtus.pro",
+    "period": {
+      "from": 2012
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 71,
+      "utl": 87,
+      "pos": 69,
+      "clu": 70
+    },
+    "dataSource": "estimated",
+    "realName": "Janusz Pogorzelski"
+  },
+  {
+    "id": "twistzz",
+    "nickname": "Twistzz",
+    "ovr": 78,
+    "role": "RIF",
+    "countryCode": "CA",
+    "team": "Team Liquid",
+    "period": {
+      "from": 2017
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 85,
+      "utl": 72,
+      "pos": 78,
+      "clu": 81
+    },
+    "dataSource": "estimated",
+    "realName": "Russel Van Dulken"
+  },
+  {
+    "id": "apex",
+    "nickname": "apEX",
+    "ovr": 77,
+    "role": "IGL",
+    "countryCode": "FR",
+    "team": "Vitality",
+    "period": {
+      "from": 2012
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 66,
+      "utl": 93,
+      "pos": 62,
+      "clu": 64
+    },
+    "dataSource": "estimated",
+    "realName": "Dan Madesclaire"
+  },
+  {
+    "id": "electronic",
+    "nickname": "electroNic",
+    "ovr": 77,
+    "role": "RIF",
+    "countryCode": "RU",
+    "team": "NAVI",
+    "period": {
+      "from": 2016
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 82,
+      "utl": 72,
+      "pos": 72,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Denis Sharipov"
+  },
+  {
+    "id": "magisk",
+    "nickname": "Magisk",
+    "ovr": 77,
+    "role": "SUP",
+    "countryCode": "DK",
+    "team": "Astralis",
+    "period": {
+      "from": 2015
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 75,
+      "utl": 86,
+      "pos": 81,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Emil Reif"
+  },
+  {
+    "id": "xyp9x",
+    "nickname": "Xyp9x",
+    "ovr": 77,
+    "role": "SUP",
+    "countryCode": "DK",
+    "team": "Astralis",
+    "period": {
+      "from": 2013,
+      "to": 2022
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 71,
+      "utl": 81,
+      "pos": 75,
+      "clu": 86
+    },
+    "dataSource": "estimated",
+    "realName": "Andreas Højsleth"
+  },
+  {
+    "id": "fallen",
+    "nickname": "FalleN",
+    "ovr": 76,
+    "role": "IGL",
+    "countryCode": "BR",
+    "team": "SK Gaming",
+    "period": {
+      "from": 2013
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 63,
+      "utl": 77,
+      "pos": 69,
+      "clu": 70
+    },
+    "dataSource": "estimated",
+    "realName": "Gabriel Toledo"
+  },
+  {
+    "id": "gla1ve",
+    "nickname": "gla1ve",
+    "ovr": 76,
+    "role": "IGL",
+    "countryCode": "DK",
+    "team": "Astralis",
+    "period": {
+      "from": 2013
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 64,
+      "utl": 95,
+      "pos": 66,
+      "clu": 60
+    },
+    "dataSource": "estimated",
+    "realName": "Lukas Rossander"
+  },
+  {
+    "id": "karrigan",
+    "nickname": "karrigan",
+    "ovr": 76,
+    "role": "IGL",
+    "countryCode": "DK",
+    "team": "FaZe Clan",
+    "period": {
+      "from": 2013
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 63,
+      "utl": 94,
+      "pos": 69,
+      "clu": 60
+    },
+    "dataSource": "estimated",
+    "realName": "Finn Andersen"
+  },
+  {
+    "id": "fer",
+    "nickname": "fer",
+    "ovr": 75,
+    "role": "RIF",
+    "countryCode": "BR",
+    "team": "SK Gaming",
+    "period": {
+      "from": 2014
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 81,
+      "utl": 72,
+      "pos": 72,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Fernando Alvarenga"
+  },
+  {
+    "id": "flusha",
+    "nickname": "flusha",
+    "ovr": 75,
+    "role": "RIF",
+    "countryCode": "SE",
+    "team": "Fnatic",
+    "period": {
+      "from": 2012,
+      "to": 2021
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 79,
+      "utl": 76,
+      "pos": 70,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Robin Rönnquist"
+  },
+  {
+    "id": "get-right",
+    "nickname": "GeT_RiGhT",
+    "ovr": 75,
+    "role": "LRK",
+    "countryCode": "SE",
+    "team": "NiP",
+    "period": {
+      "from": 2012,
+      "to": 2021
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 75,
+      "utl": 72,
+      "pos": 79,
+      "clu": 81
+    },
+    "dataSource": "estimated",
+    "realName": "Christopher Alesund"
+  },
+  {
+    "id": "jame",
+    "nickname": "Jame",
+    "ovr": 75,
+    "role": "LRK",
+    "countryCode": "RU",
+    "team": "Virtus.pro",
+    "period": {
+      "from": 2013
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 67,
+      "utl": 76,
+      "pos": 86,
+      "clu": 89
+    },
+    "dataSource": "estimated",
+    "realName": "Dzhami Ali"
+  },
+  {
+    "id": "jw",
+    "nickname": "JW",
+    "ovr": 75,
+    "role": "AWP",
+    "countryCode": "SE",
+    "team": "Fnatic",
+    "period": {
+      "from": 2013,
+      "to": 2021
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 79,
+      "utl": 68,
+      "pos": 70,
+      "clu": 79
+    },
+    "dataSource": "estimated",
+    "realName": "Jesper Wecksell"
+  },
+  {
+    "id": "kennys",
+    "nickname": "kennyS",
+    "ovr": 75,
+    "role": "AWP",
+    "countryCode": "FR",
+    "team": "G2",
+    "period": {
+      "from": 2013,
+      "to": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 82,
+      "utl": 65,
+      "pos": 63,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Kenny Schrub"
+  },
+  {
+    "id": "krimz",
+    "nickname": "KRIMZ",
+    "ovr": 75,
+    "role": "SUP",
+    "countryCode": "SE",
+    "team": "Fnatic",
+    "period": {
+      "from": 2013,
+      "to": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 70,
+      "utl": 84,
+      "pos": 76,
+      "clu": 71
+    },
+    "dataSource": "estimated",
+    "realName": "Freddy Johansson"
+  },
+  {
+    "id": "rain",
+    "nickname": "rain",
+    "ovr": 75,
+    "role": "RIF",
+    "countryCode": "NO",
+    "team": "FaZe Clan",
+    "period": {
+      "from": 2015
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 80,
+      "utl": 72,
+      "pos": 72,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Håvard Nygaard"
+  },
+  {
+    "id": "taco",
+    "nickname": "TACO",
+    "ovr": 75,
+    "role": "SUP",
+    "countryCode": "BR",
+    "team": "SK Gaming",
+    "period": {
+      "from": 2014,
+      "to": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 74,
+      "utl": 89,
+      "pos": 76,
+      "clu": 69
+    },
+    "dataSource": "estimated",
+    "realName": "Epitácio de Melo"
+  },
+  {
+    "id": "jks",
+    "nickname": "jks",
+    "ovr": 74,
+    "role": "RIF",
+    "countryCode": "AU",
+    "team": "Renegades",
+    "period": {
+      "from": 2014
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 78,
+      "utl": 76,
+      "pos": 73,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Justin Savage"
+  },
+  {
+    "id": "naf",
+    "nickname": "NAF",
+    "ovr": 74,
+    "role": "RIF",
+    "countryCode": "CA",
+    "team": "Team Liquid",
+    "period": {
+      "from": 2016
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 79,
+      "utl": 76,
+      "pos": 75,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Keith Markovic"
+  },
+  {
+    "id": "perfecto",
+    "nickname": "Perfecto",
+    "ovr": 74,
+    "role": "SUP",
+    "countryCode": "RU",
+    "team": "NAVI",
+    "period": {
+      "from": 2016
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 61,
+      "utl": 99,
+      "pos": 80,
+      "clu": 66
+    },
+    "dataSource": "estimated",
+    "realName": "Ilya Zalutskiy"
+  },
+  {
+    "id": "zeus",
+    "nickname": "Zeus",
+    "ovr": 73,
+    "role": "IGL",
+    "countryCode": "UA",
+    "team": "NAVI",
+    "period": {
+      "from": 2010,
+      "to": 2019
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 64,
+      "utl": 84,
+      "pos": 61,
+      "clu": 60
+    },
+    "dataSource": "estimated",
+    "realName": "Danylo Teslenko"
+  },
+  {
+    "id": "dupreeh",
+    "nickname": "dupreeh",
+    "ovr": 72,
+    "role": "RIF",
+    "countryCode": "DK",
+    "team": "Astralis",
+    "period": {
+      "from": 2012
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 80,
+      "utl": 77,
+      "pos": 76,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Peter Rasmussen"
+  },
+  {
+    "id": "shox",
+    "nickname": "shox",
+    "ovr": 72,
+    "role": "RIF",
+    "countryCode": "FR",
+    "team": "G2",
+    "period": {
+      "from": 2012,
+      "to": 2023
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 77,
+      "utl": 79,
+      "pos": 72,
+      "clu": 75
+    },
+    "dataSource": "estimated",
+    "realName": "Richard Papillon"
+  },
+  {
+    "id": "stewie2k",
+    "nickname": "Stewie2K",
+    "ovr": 71,
+    "role": "RIF",
+    "countryCode": "US",
+    "team": "Cloud9",
+    "period": {
+      "from": 2015,
+      "to": 2022
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 76,
+      "utl": 76,
+      "pos": 66,
+      "clu": 73
+    },
+    "dataSource": "estimated",
+    "realName": "Jake Yip"
+  }
+]

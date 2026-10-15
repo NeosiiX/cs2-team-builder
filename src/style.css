@@ -1,0 +1,161 @@
+:root {
+  --bg: #0b0e14;
+  --panel: #121721;
+  --border: rgba(51, 65, 85, 0.8);
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --gold: #fbbf24;
+  --blue: #0ea5e9;
+  --green: #4ade80;
+  --red: #f87171;
+}
+
+* { box-sizing: border-box; margin: 0; }
+body {
+  background: radial-gradient(1200px 600px at 70% -10%, rgba(14, 165, 233, 0.08), transparent), var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+}
+button, input, select { font: inherit; color: inherit; }
+.muted { color: var(--muted); }
+.pad { padding: 16px; }
+
+/* Topbar */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 28px; border-bottom: 1px solid var(--border);
+}
+.brand { font-size: 1.1rem; letter-spacing: 0.12em; display: flex; gap: 10px; align-items: center; }
+.brand-mark { color: var(--gold); }
+
+.btn {
+  border: 1px solid transparent; border-radius: 8px; padding: 8px 16px; cursor: pointer;
+  font-weight: 600; transition: transform 0.1s, filter 0.15s, background 0.15s;
+}
+.btn:hover { filter: brightness(1.1); }
+.btn:active { transform: translateY(1px); }
+.btn-gold { background: linear-gradient(180deg, #fcd34d, #d97706); color: #1c1203; }
+.btn-ghost { background: transparent; border-color: var(--border); }
+.btn-ghost:hover { background: rgba(148, 163, 184, 0.1); }
+.danger { color: var(--red); }
+.full { width: 100%; margin-top: 16px; }
+
+/* Onglets */
+.tabs { display: flex; gap: 4px; padding: 0 28px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.tab {
+  background: none; border: none; padding: 14px 18px; cursor: pointer; color: var(--muted);
+  border-bottom: 2px solid transparent; white-space: nowrap;
+}
+.tab small { font-size: 0.65rem; opacity: 0.6; text-transform: uppercase; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+main { padding: 28px; max-width: 1300px; margin: 0 auto; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+.placeholder { text-align: center; padding: 80px 20px; color: var(--muted); }
+
+/* Layout équipe */
+.team-layout { display: grid; grid-template-columns: 1fr 320px; gap: 24px; align-items: start; }
+.slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+.slot-label { font-weight: 700; letter-spacing: 0.1em; font-size: 0.8rem; margin-bottom: 8px; color: var(--gold); }
+.slot-label small { color: var(--muted); font-weight: 400; letter-spacing: 0; }
+.slot-coach .slot-label { color: var(--blue); }
+.slot-empty {
+  width: 100%; aspect-ratio: 2 / 3; border: 2px dashed var(--border); border-radius: 14px;
+  background: rgba(18, 23, 33, 0.6); display: flex; flex-direction: column; gap: 8px;
+  align-items: center; justify-content: center; cursor: pointer; color: var(--muted);
+  transition: border-color 0.15s, color 0.15s;
+}
+.slot-empty:hover { border-color: var(--gold); color: var(--gold); }
+.slot-empty .plus { font-size: 2.4rem; line-height: 1; }
+.slot-actions { display: flex; gap: 8px; margin-top: 8px; }
+.slot-actions .btn { flex: 1; padding: 6px 8px; font-size: 0.8rem; }
+
+/* Carte joueur */
+.card {
+  aspect-ratio: 2 / 3; border-radius: 14px; padding: 10px; display: flex; flex-direction: column;
+  position: relative; overflow: hidden; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.card::after { /* reflet */
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.28) 50%, transparent 65%);
+}
+.card.silver { background: linear-gradient(145deg, #e5e7eb, #9ca3af 45%, #6b7280); color: #111827; }
+.card.gold { background: linear-gradient(145deg, #fde68a, #facc15 50%, #d97706); color: #3b2a05; }
+.card.legend { background: linear-gradient(145deg, #f0abfc, #a855f7 45%, #4f46e5); color: #fff; }
+
+.card-head { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; }
+.ovr { font-size: 2rem; font-weight: 800; line-height: 1; grid-row: span 2; }
+.role-pill {
+  font-weight: 700; font-size: 0.75rem; background: rgba(0, 0, 0, 0.6); color: #e2e8f0;
+  padding: 2px 8px; border-radius: 999px; width: fit-content;
+}
+.role-ok { color: var(--green); }
+.role-bad { color: var(--red); }
+.flag { width: 22px; height: auto; border-radius: 2px; margin-top: 4px; }
+.period { font-size: 0.7rem; font-weight: 600; opacity: 0.85; }
+
+.portrait { flex: 1; position: relative; display: grid; place-items: center; min-height: 0; }
+.portrait .initials { font-size: 3.4rem; font-weight: 900; opacity: 0.22; }
+.portrait img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: bottom; }
+
+.card-foot { text-align: center; }
+.nick { font-weight: 900; font-size: 1.15rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.team { font-size: 0.72rem; opacity: 0.85; margin-bottom: 6px; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid rgba(0, 0, 0, 0.25); padding-top: 6px; }
+.stats div { display: flex; flex-direction: column; }
+.stats b { font-size: 1rem; }
+.stats span { font-size: 0.6rem; font-weight: 700; opacity: 0.8; }
+
+/* Panneau alchimie */
+.chem h2 { font-size: 1rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+.chem h3 { margin: 18px 0 8px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+.chem-total { font-size: 3rem; font-weight: 800; margin: 8px 0; }
+.chem-total small { font-size: 1rem; color: var(--muted); font-weight: 400; }
+.bar { height: 10px; background: #0b0e14; border-radius: 999px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 14px; }
+.bar-fill { height: 100%; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width 0.4s ease; }
+.chem-line, .stat-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(51, 65, 85, 0.4); }
+.chem-line small { color: var(--muted); font-weight: 400; }
+.bonus { color: var(--green); font-style: normal; font-weight: 700; margin-left: 4px; }
+.team-ovr { font-size: 2.2rem; font-weight: 800; margin-bottom: 6px; }
+.team-ovr small { font-size: 0.8rem; color: var(--muted); margin-left: 6px; }
+.stat-val { font-weight: 700; }
+.pairs { list-style: none; padding: 0; font-size: 0.85rem; display: grid; gap: 4px; }
+.pairs small { color: var(--muted); }
+
+/* Dialogs */
+.dialog {
+  margin: auto; background: var(--panel); color: var(--text); border: 1px solid var(--border);
+  border-radius: 14px; padding: 24px; width: min(420px, 92vw);
+}
+.dialog-wide { width: min(640px, 94vw); max-height: 85vh; }
+.dialog::backdrop { background: rgba(2, 6, 12, 0.75); backdrop-filter: blur(3px); }
+.dialog h2 { margin-bottom: 8px; }
+.dialog p { margin-bottom: 10px; }
+.dialog input, .dialog select {
+  width: 100%; background: #0b0e14; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+}
+.dialog input:focus, .dialog select:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+.picker-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.picker-filters { display: grid; grid-template-columns: 1fr 150px; gap: 10px; margin-bottom: 12px; }
+.picker-list { list-style: none; padding: 0; max-height: 55vh; overflow-y: auto; display: grid; gap: 6px; }
+.picker-row {
+  width: 100%; display: grid; grid-template-columns: 40px 44px 26px 1fr auto; gap: 10px; align-items: center;
+  background: #0b0e14; border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px;
+  padding: 8px 10px; cursor: pointer; text-align: left;
+}
+.picker-row.silver { border-left-color: #9ca3af; }
+.picker-row.gold { border-left-color: var(--gold); }
+.picker-row.legend { border-left-color: #a855f7; }
+.picker-row:hover { background: rgba(148, 163, 184, 0.1); }
+.pr-ovr { font-weight: 800; }
+.pr-role { font-size: 0.75rem; font-weight: 700; color: var(--muted); }
+.pr-name { font-weight: 700; }
+.pr-team { color: var(--muted); font-size: 0.8rem; }
+
+@media (max-width: 960px) {
+  .team-layout { grid-template-columns: 1fr; }
+}
