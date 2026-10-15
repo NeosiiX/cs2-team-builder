@@ -30,6 +30,7 @@ const accountDialog = $<HTMLDialogElement>('#account-dialog');
 const pickerDialog = $<HTMLDialogElement>('#picker-dialog');
 const packDialog = $<HTMLDialogElement>('#pack-dialog');
 const coinsEl = $('#coins');
+const coinsDialog = $<HTMLDialogElement>('#coins-dialog');
 
 const isOwned = (id: string) => save.owned.includes(id);
 
@@ -321,6 +322,33 @@ function render() {
   else if (activeTab === 'packs') renderPacks();
   else renderPlaceholder(TABS.find((t) => t.id === activeTab)!.label);
 }
+
+/* ---------- ajout de pièces ---------- */
+const COIN_AMOUNTS = [100, 500, 1000, 5000];
+
+function openCoinsDialog() {
+  coinsDialog.innerHTML = `
+    <h2>Ajouter des pièces</h2>
+    <p class="muted">Solde actuel : 🪙 ${save.coins.toLocaleString('fr-FR')}</p>
+    <div class="coin-options">
+      ${COIN_AMOUNTS.map((n) => `<button class="btn btn-gold" data-add-coins="${n}">+ 🪙 ${n.toLocaleString('fr-FR')}</button>`).join('')}
+    </div>
+    <div class="dialog-actions"><button class="btn btn-ghost" data-close>Fermer</button></div>`;
+  coinsDialog.showModal();
+}
+
+$('#add-coins-btn').addEventListener('click', openCoinsDialog);
+
+coinsDialog.addEventListener('click', (e) => {
+  const t = e.target as HTMLElement;
+  if (t === coinsDialog || t.hasAttribute('data-close')) return coinsDialog.close();
+  const btn = t.closest<HTMLElement>('[data-add-coins]');
+  if (!btn) return;
+  save.coins += Number(btn.dataset.addCoins);
+  persist(save);
+  render();
+  openCoinsDialog(); // rafraîchit le solde affiché
+});
 
 /* ---------- compte ---------- */
 function openAccountDialog() {
