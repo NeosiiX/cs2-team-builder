@@ -5,7 +5,7 @@ import { SLOTS, emptyTeam } from './types';
 import { loadSave, persist } from './storage';
 import { computeChemistry, CHEM } from './chemistry';
 import { PACKS, RARITY_LABEL } from './packs';
-import { RARITIES, DUPLICATE_REFUND, effectiveOdds, eligiblePlayers, rollPlayer, fmtPct } from './luck';
+import { RARITIES, DUPLICATE_REFUND, effectiveOdds, rollPlayer, fmtPct } from './luck';
 import type { PackDef } from './packs';
 
 const players = playersData as unknown as Player[];
@@ -227,12 +227,6 @@ function renderCollection() {
 }
 
 /* ---------- onglet Caisses ---------- */
-function packRangeLabel(pack: PackDef): string {
-  const pool = eligiblePlayers(pack, players);
-  const ovrs = pool.map((p) => p.ovr);
-  return `${pool.length} joueurs possibles · note ${Math.min(...ovrs)} à ${Math.max(...ovrs)}`;
-}
-
 function packCardHTML(pack: PackDef): string {
   const can = save.coins >= pack.price;
   const real = effectiveOdds(pack, players);
@@ -248,11 +242,10 @@ function packCardHTML(pack: PackDef): string {
     .join('');
   return `
     <article class="panel pack" style="--accent:${pack.accent}">
-      <div class="pack-crate">📦</div>
+      <div class="pack-crate"><span class="crate-fallback">📦</span><img src="${esc(pack.image)}" alt="${esc(pack.name)}" onerror="this.remove()" /></div>
       <h3>${esc(pack.name)}</h3>
       <p class="muted">${esc(pack.tagline)}</p>
       <div class="odds">${odds}</div>
-      <p class="pack-range">${packRangeLabel(pack)}</p>
       <button class="btn btn-gold full" data-open-pack="${pack.id}" ${can ? '' : 'disabled'}>
         Ouvrir — 🪙 ${pack.price}
       </button>

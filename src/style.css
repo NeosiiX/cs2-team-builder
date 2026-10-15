@@ -263,7 +263,13 @@ main { padding: 28px 32px 48px; max-width: 1440px; margin: 0 auto; }
   --accent: var(--gold); text-align: center; border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   background: radial-gradient(260px 160px at 50% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent), var(--panel);
 }
-.pack-crate { font-size: 4.2rem; line-height: 1; margin: 6px 0 10px; filter: drop-shadow(0 6px 14px color-mix(in srgb, var(--accent) 60%, transparent)); }
+.pack-crate {
+  height: 120px; margin: 4px 0 12px; display: grid; place-items: center;
+  filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--accent) 55%, transparent));
+}
+.pack-crate img { max-width: 100%; max-height: 120px; object-fit: contain; }
+.pack-crate .crate-fallback { font-size: 4.2rem; line-height: 1; }
+.pack-crate:has(img) .crate-fallback { display: none; }
 .pack h3 { font-family: var(--font-display); font-size: 1.6rem; font-weight: 700; color: var(--accent); }
 .pack > p { margin: 4px 0 16px; font-size: 0.88rem; }
 .odds { display: grid; gap: 8px; text-align: left; }
@@ -276,7 +282,7 @@ main { padding: 28px 32px 48px; max-width: 1440px; margin: 0 auto; }
 .odds-row.legend .odds-bar div { background: var(--violet); }
 .pack { display: flex; flex-direction: column; }
 .pack .full { margin-top: auto; }
-.pack-range { margin: 14px 0 18px; font-size: 0.8rem; color: var(--muted); }
+.pack .odds { margin-bottom: 18px; }
 .odds-row.gold .odds-label { color: var(--gold-hi); }
 .odds-row.legend .odds-label { color: #b9a3ff; }
 

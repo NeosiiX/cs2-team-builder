@@ -11,6 +11,8 @@ export interface PackDef {
   maxOvr?: number;
   minOvr?: number;
   accent: string;
+  /** image affichée sur la caisse (fichier dans public/crates/) */
+  image: string;
 }
 
 export const PACKS: PackDef[] = [
@@ -22,6 +24,7 @@ export const PACKS: PackDef[] = [
     maxOvr: 77,
     odds: { silver: 70, gold: 30, legend: 0 },
     accent: '#9fb0c9',
+    image: '/crates/ak-asiimov.png',
   },
   {
     id: 'pro',
@@ -30,6 +33,7 @@ export const PACKS: PackDef[] = [
     price: 400,
     odds: { silver: 60, gold: 39.75, legend: 0.25 },
     accent: '#e8a838',
+    image: '/crates/awp-dragon-lore.png',
   },
   {
     id: 'elite',
@@ -39,6 +43,7 @@ export const PACKS: PackDef[] = [
     minOvr: 78,
     odds: { silver: 0, gold: 99, legend: 1 },
     accent: '#9b7bff',
+    image: '/crates/karambit-ruby.png',
   },
 ];
 
