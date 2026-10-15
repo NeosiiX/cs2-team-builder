@@ -102,6 +102,19 @@ main { padding: 28px 32px 48px; max-width: 1440px; margin: 0 auto; }
 .section-head h2 { font-family: var(--font-display); font-size: 1.7rem; font-weight: 700; color: var(--text); }
 
 /* --------------------------------------------------------------------------
+   Page d'accueil (sans compte)
+   -------------------------------------------------------------------------- */
+.logged-out .tabs, .logged-out .topbar-right { display: none; }
+.welcome {
+  min-height: calc(100vh - 170px); display: grid; align-content: center; justify-items: center;
+  gap: 22px; text-align: center; max-width: 720px; margin: 0 auto; padding: 24px 0;
+}
+.welcome h1 { font-family: var(--font-display); font-size: clamp(2.6rem, 7vw, 4.6rem); font-weight: 800; line-height: 1; }
+.welcome-goal { font-size: 1.15rem; line-height: 1.6; color: var(--muted); max-width: 60ch; }
+.welcome-note { font-family: var(--font-display); font-size: 1.4rem; font-weight: 600; color: var(--gold-hi); }
+.btn-lg { padding: 14px 34px; font-size: 1.1rem; border-radius: 10px; }
+
+/* --------------------------------------------------------------------------
    Onglet My team : tableau tactique
    -------------------------------------------------------------------------- */
 .team-layout { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 24px; align-items: start; }

@@ -271,6 +271,7 @@ function tileHTML(p: Player): string {
 }
 
 function openPack(packId: string) {
+  if (!save.profile) return;
   const pack = PACKS.find((p) => p.id === packId);
   if (!pack || spinning || save.coins < pack.price) return;
 
@@ -345,7 +346,28 @@ packDialog.addEventListener('click', (e) => {
   if (again && !(again as HTMLButtonElement).disabled) openPack(again.dataset.again!);
 });
 
+/* ---------- page d'accueil (sans compte) ---------- */
+function renderWelcome() {
+  view.innerHTML = `
+    <section class="welcome">
+      <h1>Construis l'équipe CS2 ultime</h1>
+      <p class="welcome-goal">
+        Ouvre des caisses pour débloquer des cartes de joueurs, puis compose ton équipe : cinq joueurs et un coach.
+        Place chacun à son vrai rôle et réunis d'anciens coéquipiers pour faire monter l'alchimie et la note de ton équipe.
+        Le but : bâtir la meilleure équipe possible.
+      </p>
+      <p class="welcome-note">Pour jouer, tu dois d'abord créer un compte.</p>
+      <button class="btn btn-gold btn-lg" data-action="signup">Créer mon compte</button>
+    </section>`;
+}
+
 function render() {
+  const loggedIn = !!save.profile;
+  document.body.classList.toggle('logged-out', !loggedIn);
+  if (!loggedIn) {
+    renderWelcome();
+    return;
+  }
   renderTabs();
   renderAccountBtn();
   renderCoins();
@@ -417,6 +439,7 @@ accountDialog.addEventListener('submit', (e) => {
   const username = (form.elements.namedItem('username') as HTMLInputElement).value.trim();
   if (!username) return;
   save.profile = { username, createdAt: new Date().toISOString() };
+  activeTab = 'team';
   accountDialog.close();
   commit();
 });
@@ -515,13 +538,18 @@ pickerDialog.addEventListener('click', (e) => {
 /* ---------- événements globaux ---------- */
 tabsEl.addEventListener('click', (e) => {
   const tab = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]');
-  if (!tab) return;
+  if (!tab || !save.profile) return;
   activeTab = tab.dataset.tab!;
   render();
 });
 
 view.addEventListener('click', (e) => {
   const target = e.target as HTMLElement;
+  if (!save.profile) {
+    // sans compte, la seule action possible est de créer un compte
+    if (target.closest('[data-action="signup"]')) openAccountDialog();
+    return;
+  }
   const packBtn = target.closest<HTMLElement>('[data-open-pack]');
   if (packBtn) return openPack(packBtn.dataset.openPack!);
   const filter = target.closest<HTMLElement>('[data-filter]');
