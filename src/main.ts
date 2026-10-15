@@ -4,7 +4,8 @@ import type { Player, SlotId, SlotDef, Role } from './types';
 import { SLOTS, emptyTeam } from './types';
 import { loadSave, persist } from './storage';
 import { computeChemistry, CHEM } from './chemistry';
-import { PACKS, RARITY_LABEL, DUPLICATE_REFUND, rollPlayer } from './packs';
+import { PACKS, RARITY_LABEL } from './packs';
+import { RARITIES, DUPLICATE_REFUND, effectiveOdds, eligiblePlayers, rollPlayer, fmtPct } from './luck';
 import type { PackDef } from './packs';
 
 const players = playersData as unknown as Player[];
@@ -226,24 +227,32 @@ function renderCollection() {
 }
 
 /* ---------- onglet Caisses ---------- */
-const RARITIES = ['legend', 'gold', 'silver'] as const;
+function packRangeLabel(pack: PackDef): string {
+  const pool = eligiblePlayers(pack, players);
+  const ovrs = pool.map((p) => p.ovr);
+  return `${pool.length} joueurs possibles · note ${Math.min(...ovrs)} à ${Math.max(...ovrs)}`;
+}
 
 function packCardHTML(pack: PackDef): string {
   const can = save.coins >= pack.price;
-  const odds = RARITIES.map(
-    (r) => `
+  const real = effectiveOdds(pack, players);
+  const odds = RARITIES.filter((r) => real[r] > 0)
+    .map(
+      (r) => `
       <div class="odds-row ${r}">
         <span class="odds-label">${RARITY_LABEL[r]}</span>
-        <div class="odds-bar"><div style="width:${pack.odds[r]}%"></div></div>
-        <b>${pack.odds[r]}%</b>
+        <div class="odds-bar"><div style="width:${Math.max(real[r], 1.5)}%"></div></div>
+        <b>${fmtPct(real[r])}</b>
       </div>`,
-  ).join('');
+    )
+    .join('');
   return `
     <article class="panel pack" style="--accent:${pack.accent}">
       <div class="pack-crate">📦</div>
       <h3>${esc(pack.name)}</h3>
       <p class="muted">${esc(pack.tagline)}</p>
       <div class="odds">${odds}</div>
+      <p class="pack-range">${packRangeLabel(pack)}</p>
       <button class="btn btn-gold full" data-open-pack="${pack.id}" ${can ? '' : 'disabled'}>
         Ouvrir — 🪙 ${pack.price}
       </button>
@@ -254,7 +263,7 @@ function renderPacks() {
   view.innerHTML = `
     <div class="section-head">
       <h2>Caisses CS2</h2>
-      <span class="muted">Un joueur déjà possédé est revendu : 🪙 ${DUPLICATE_REFUND.silver} / ${DUPLICATE_REFUND.gold} / ${DUPLICATE_REFUND.legend} (Silver / Gold / Légende)</span>
+      <span class="muted">Doublon revendu : 🪙 ${DUPLICATE_REFUND.silver} / ${DUPLICATE_REFUND.gold} / ${DUPLICATE_REFUND.legend} (Silver / Gold / Légende)</span>
     </div>
     <div class="pack-grid">${PACKS.map(packCardHTML).join('')}</div>`;
 }

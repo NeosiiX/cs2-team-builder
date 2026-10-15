@@ -1,39 +1,44 @@
-import type { Player, Rarity } from './types';
+import type { Rarity } from './types';
 
 export interface PackDef {
   id: string;
   name: string;
   tagline: string;
   price: number;
-  /** probabilités en % — la somme doit faire 100 */
+  /** probabilités de base par rareté, en % (ramenées à 100 % selon les joueurs éligibles) */
   odds: Record<Rarity, number>;
+  /** note maximale / minimale des joueurs qui peuvent tomber dans la caisse */
+  maxOvr?: number;
+  minOvr?: number;
   accent: string;
 }
 
 export const PACKS: PackDef[] = [
   {
-    id: 'bronze',
+    id: 'recrue',
     name: 'Caisse Recrue',
-    tagline: 'Pour démarrer ta collection',
+    tagline: 'Aucune star : note maximale 77',
     price: 100,
-    odds: { silver: 80, gold: 19, legend: 1 },
-    accent: '#9ca3af',
+    maxOvr: 77,
+    odds: { silver: 70, gold: 30, legend: 0 },
+    accent: '#9fb0c9',
   },
   {
     id: 'pro',
     name: 'Caisse Pro',
-    tagline: 'De bonnes chances de tomber sur un Gold',
-    price: 300,
-    odds: { silver: 50, gold: 44, legend: 6 },
-    accent: '#fbbf24',
+    tagline: 'Tous les joueurs, les légendes sont très rares',
+    price: 400,
+    odds: { silver: 60, gold: 39.75, legend: 0.25 },
+    accent: '#e8a838',
   },
   {
     id: 'elite',
-    name: 'Caisse Légende',
-    tagline: 'Les meilleurs joueurs de l’histoire de CS',
-    price: 800,
-    odds: { silver: 15, gold: 65, legend: 20 },
-    accent: '#a855f7',
+    name: 'Caisse Élite',
+    tagline: 'Que du haut niveau : note minimale 78',
+    price: 1000,
+    minOvr: 78,
+    odds: { silver: 0, gold: 99, legend: 1 },
+    accent: '#9b7bff',
   },
 ];
 
@@ -42,23 +47,3 @@ export const RARITY_LABEL: Record<Rarity, string> = {
   gold: 'Gold Star',
   legend: 'Légende',
 };
-
-/** Pièces rendues quand on tire un joueur qu'on possède déjà */
-export const DUPLICATE_REFUND: Record<Rarity, number> = { silver: 40, gold: 120, legend: 400 };
-
-export function rollRarity(odds: Record<Rarity, number>, rng: () => number = Math.random): Rarity {
-  const total = odds.silver + odds.gold + odds.legend;
-  let r = rng() * total;
-  for (const rarity of ['legend', 'gold', 'silver'] as Rarity[]) {
-    r -= odds[rarity];
-    if (r < 0) return rarity;
-  }
-  return 'silver';
-}
-
-export function rollPlayer(pack: PackDef, players: Player[], rng: () => number = Math.random): Player {
-  const rarity = rollRarity(pack.odds, rng);
-  const pool = players.filter((p) => p.rarity === rarity);
-  const list = pool.length ? pool : players;
-  return list[Math.floor(rng() * list.length)];
-}
