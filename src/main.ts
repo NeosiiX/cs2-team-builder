@@ -1,6 +1,6 @@
 import './style.css';
 import playersData from './data/players.json';
-import type { Player, SlotId, Role } from './types';
+import type { Player, SlotId, SlotDef, Role } from './types';
 import { SLOTS, emptyTeam } from './types';
 import { loadSave, persist } from './storage';
 import { computeChemistry, CHEM } from './chemistry';
@@ -90,7 +90,7 @@ function renderTeam() {
   const team = teamPlayers();
   const chem = computeChemistry(team);
 
-  const slots = SLOTS.map((s) => {
+  const slotHTML = (s: SlotDef) => {
     const p = team[s.id];
     const fit = chem.fits[s.id];
     const body = p
@@ -104,10 +104,13 @@ function renderTeam() {
          </button>`;
     return `
       <section class="slot ${s.id === 'coach' ? 'slot-coach' : ''}">
-        <div class="slot-label">${s.label}${s.role ? ` <small>· rôle ${s.role}</small>` : ' <small>· bonus staff</small>'}</div>
+        <div class="slot-label"><b>${s.label}</b><small>${s.role ? `rôle ${s.role}` : 'bonus staff'}</small></div>
         ${body}
       </section>`;
-  }).join('');
+  };
+
+  const starters = SLOTS.filter((s) => s.role).map(slotHTML).join('');
+  const coach = SLOTS.filter((s) => !s.role).map(slotHTML).join('');
 
   const statRow = (label: string, v: number) => `
     <div class="stat-row"><span>${label}</span>
@@ -120,7 +123,10 @@ function renderTeam() {
 
   view.innerHTML = `
     <div class="team-layout">
-      <div class="slots">${slots}</div>
+      <div class="board">
+        <div class="lineup">${starters}</div>
+        <div class="lineup lineup-coach">${coach}</div>
+      </div>
       <aside class="panel chem">
         <h2>Alchimie</h2>
         <div class="chem-total"><span>${chem.total}</span><small>/100</small></div>
