@@ -177,22 +177,52 @@ function renderCoins() {
 }
 
 /* ---------- onglet Collection ---------- */
+type CollectionFilter = 'all' | 'owned' | 'locked';
+let collectionFilter: CollectionFilter = 'all';
+
+function lockedCardHTML(p: Player): string {
+  return `
+    <div class="locked-wrap" title="${esc(p.nickname)} — à trouver dans une caisse">
+      ${cardHTML(p, null)}
+      <div class="lock"><span class="lock-icon" aria-hidden="true">🔒</span><span class="lock-text">Verrouillé</span></div>
+    </div>`;
+}
+
 function renderCollection() {
-  const mine = players.filter((p) => isOwned(p.id)).sort((a, b) => b.ovr - a.ovr);
-  const header = `
+  const sorted = [...players].sort((a, b) => b.ovr - a.ovr);
+  const ownedCount = sorted.filter((p) => isOwned(p.id)).length;
+  const lockedCount = sorted.length - ownedCount;
+  const list = sorted.filter((p) =>
+    collectionFilter === 'all' ? true : collectionFilter === 'owned' ? isOwned(p.id) : !isOwned(p.id),
+  );
+
+  const chip = (id: CollectionFilter, label: string, n: number) =>
+    `<button class="chip ${collectionFilter === id ? 'active' : ''}" data-filter="${id}">${label} <b>${n}</b></button>`;
+
+  const grid = list.length
+    ? `<div class="card-grid">${list.map((p) => (isOwned(p.id) ? cardHTML(p, null) : lockedCardHTML(p))).join('')}</div>`
+    : `<div class="panel placeholder"><p>${
+        collectionFilter === 'owned' ? "Tu n'as encore aucun joueur." : 'Tu as débloqué tous les joueurs !'
+      }</p>${
+        collectionFilter === 'owned'
+          ? '<button class="btn btn-gold" data-goto="packs" style="margin-top:16px">Ouvrir une caisse</button>'
+          : ''
+      }</div>`;
+
+  view.innerHTML = `
     <div class="section-head">
       <h2>Ma collection</h2>
-      <span class="muted">${mine.length} / ${players.length} joueurs débloqués</span>
-    </div>`;
-  if (!mine.length) {
-    view.innerHTML = `${header}
-      <div class="panel placeholder">
-        <p>Tu n'as encore aucun joueur.</p>
-        <button class="btn btn-gold" data-goto="packs" style="margin-top:16px">Ouvrir une caisse</button>
-      </div>`;
-    return;
-  }
-  view.innerHTML = `${header}<div class="card-grid">${mine.map((p) => cardHTML(p, null)).join('')}</div>`;
+      <span class="muted">${ownedCount} / ${sorted.length} joueurs débloqués</span>
+    </div>
+    <div class="collection-bar">
+      <div class="chips">
+        ${chip('all', 'Tous', sorted.length)}
+        ${chip('owned', 'Débloqués', ownedCount)}
+        ${chip('locked', 'Verrouillés', lockedCount)}
+      </div>
+      <button class="btn btn-gold" data-goto="packs">Ouvrir une caisse</button>
+    </div>
+    ${grid}`;
 }
 
 /* ---------- onglet Caisses ---------- */
@@ -492,6 +522,8 @@ view.addEventListener('click', (e) => {
   const target = e.target as HTMLElement;
   const packBtn = target.closest<HTMLElement>('[data-open-pack]');
   if (packBtn) return openPack(packBtn.dataset.openPack!);
+  const filter = target.closest<HTMLElement>('[data-filter]');
+  if (filter) { collectionFilter = filter.dataset.filter as CollectionFilter; return render(); }
   const goto = target.closest<HTMLElement>('[data-goto]');
   if (goto) { activeTab = goto.dataset.goto!; return render(); }
   const el = target.closest<HTMLElement>('[data-action]');

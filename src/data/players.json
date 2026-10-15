@@ -81,6 +81,27 @@
     "realName": "Ilya Osipov"
   },
   {
+    "id": "guardian",
+    "nickname": "GuardiaN",
+    "ovr": 88,
+    "role": "AWP",
+    "countryCode": "SK",
+    "team": "NAVI",
+    "period": {
+      "from": 2013,
+      "to": 2016
+    },
+    "rarity": "legend",
+    "stats": {
+      "aim": 88,
+      "utl": 64,
+      "pos": 78,
+      "clu": 94
+    },
+    "dataSource": "estimated",
+    "realName": "Ladislav Kovács"
+  },
+  {
     "id": "sh1ro",
     "nickname": "sh1ro",
     "ovr": 86,
@@ -121,6 +142,46 @@
     "realName": "Nikola Kovač"
   },
   {
+    "id": "jl",
+    "nickname": "jL",
+    "ovr": 83,
+    "role": "RIF",
+    "countryCode": "LT",
+    "team": "NAVI",
+    "period": {
+      "from": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 84,
+      "utl": 72,
+      "pos": 80,
+      "clu": 84
+    },
+    "dataSource": "estimated",
+    "realName": "Justinas Lekavičius"
+  },
+  {
+    "id": "flamez",
+    "nickname": "flameZ",
+    "ovr": 83,
+    "role": "RIF",
+    "countryCode": "IL",
+    "team": "Vitality",
+    "period": {
+      "from": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 86,
+      "utl": 70,
+      "pos": 78,
+      "clu": 84
+    },
+    "dataSource": "estimated",
+    "realName": "Shahar Shushan"
+  },
+  {
     "id": "ropz",
     "nickname": "ropz",
     "ovr": 82,
@@ -139,6 +200,66 @@
     },
     "dataSource": "estimated",
     "realName": "Robin Kool"
+  },
+  {
+    "id": "spinx",
+    "nickname": "Spinx",
+    "ovr": 82,
+    "role": "RIF",
+    "countryCode": "IL",
+    "team": "Vitality",
+    "period": {
+      "from": 2022
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 85,
+      "utl": 72,
+      "pos": 78,
+      "clu": 82
+    },
+    "dataSource": "estimated",
+    "realName": "Lotan Giladi"
+  },
+  {
+    "id": "xertion",
+    "nickname": "xertioN",
+    "ovr": 82,
+    "role": "RIF",
+    "countryCode": "IL",
+    "team": "MOUZ",
+    "period": {
+      "from": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 85,
+      "utl": 70,
+      "pos": 78,
+      "clu": 82
+    },
+    "dataSource": "estimated",
+    "realName": "Dorian Berman"
+  },
+  {
+    "id": "jimpphat",
+    "nickname": "Jimpphat",
+    "ovr": 81,
+    "role": "RIF",
+    "countryCode": "FI",
+    "team": "MOUZ",
+    "period": {
+      "from": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 84,
+      "utl": 70,
+      "pos": 78,
+      "clu": 82
+    },
+    "dataSource": "estimated",
+    "realName": "Jimi Salo"
   },
   {
     "id": "broky",
@@ -202,6 +323,107 @@
     "realName": "Nicolai Reedtz"
   },
   {
+    "id": "w0nderful",
+    "nickname": "w0nderful",
+    "ovr": 80,
+    "role": "AWP",
+    "countryCode": "UA",
+    "team": "NAVI",
+    "period": {
+      "from": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 78,
+      "utl": 68,
+      "pos": 76,
+      "clu": 86
+    },
+    "dataSource": "estimated",
+    "realName": "Ihor Zhdanov"
+  },
+  {
+    "id": "torzsi",
+    "nickname": "torzsi",
+    "ovr": 80,
+    "role": "AWP",
+    "countryCode": "HU",
+    "team": "MOUZ",
+    "period": {
+      "from": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 80,
+      "utl": 66,
+      "pos": 76,
+      "clu": 88
+    },
+    "dataSource": "estimated",
+    "realName": "Ádám Torzsás"
+  },
+  {
+    "id": "hunter",
+    "nickname": "huNter-",
+    "ovr": 80,
+    "role": "RIF",
+    "countryCode": "BA",
+    "team": "G2",
+    "period": {
+      "from": 2021
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 80,
+      "utl": 76,
+      "pos": 80,
+      "clu": 80
+    },
+    "dataSource": "estimated",
+    "realName": "Nemanja Kovač"
+  },
+  {
+    "id": "skadoodle",
+    "nickname": "Skadoodle",
+    "ovr": 80,
+    "role": "AWP",
+    "countryCode": "US",
+    "team": "Cloud9",
+    "period": {
+      "from": 2015,
+      "to": 2019
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 82,
+      "utl": 64,
+      "pos": 74,
+      "clu": 82
+    },
+    "dataSource": "estimated",
+    "realName": "Tyler Latham"
+  },
+  {
+    "id": "kscerato",
+    "nickname": "KSCERATO",
+    "ovr": 80,
+    "role": "RIF",
+    "countryCode": "BR",
+    "team": "FURIA",
+    "period": {
+      "from": 2018
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 84,
+      "utl": 74,
+      "pos": 78,
+      "clu": 80
+    },
+    "dataSource": "estimated",
+    "realName": "Kaike Cerato"
+  },
+  {
     "id": "b1t",
     "nickname": "b1t",
     "ovr": 79,
@@ -240,6 +462,108 @@
     },
     "dataSource": "estimated",
     "realName": "David Čerňanský"
+  },
+  {
+    "id": "im",
+    "nickname": "iM",
+    "ovr": 79,
+    "role": "LRK",
+    "countryCode": "RO",
+    "team": "NAVI",
+    "period": {
+      "from": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 82,
+      "utl": 70,
+      "pos": 76,
+      "clu": 80
+    },
+    "dataSource": "estimated",
+    "realName": "Mihai Ivan"
+  },
+  {
+    "id": "aleksib",
+    "nickname": "Aleksib",
+    "ovr": 79,
+    "role": "IGL",
+    "countryCode": "FI",
+    "team": "NAVI",
+    "period": {
+      "from": 2022
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 68,
+      "utl": 91,
+      "pos": 70,
+      "clu": 66
+    },
+    "dataSource": "estimated",
+    "realName": "Aleksi Virolainen"
+  },
+  {
+    "id": "brollan",
+    "nickname": "Brollan",
+    "ovr": 79,
+    "role": "LRK",
+    "countryCode": "SE",
+    "team": "MOUZ",
+    "period": {
+      "from": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 82,
+      "utl": 72,
+      "pos": 78,
+      "clu": 80
+    },
+    "dataSource": "estimated",
+    "realName": "Ludvig Brolin"
+  },
+  {
+    "id": "shroud",
+    "nickname": "shroud",
+    "ovr": 79,
+    "role": "RIF",
+    "countryCode": "CA",
+    "team": "Cloud9",
+    "period": {
+      "from": 2015,
+      "to": 2018
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 84,
+      "utl": 66,
+      "pos": 72,
+      "clu": 80
+    },
+    "dataSource": "estimated",
+    "realName": "Michael Grzesiek"
+  },
+  {
+    "id": "stavn",
+    "nickname": "stavn",
+    "ovr": 79,
+    "role": "RIF",
+    "countryCode": "DK",
+    "team": "Heroic",
+    "period": {
+      "from": 2020,
+      "to": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 82,
+      "utl": 72,
+      "pos": 76,
+      "clu": 80
+    },
+    "dataSource": "estimated",
+    "realName": "Martin Lund"
   },
   {
     "id": "elige",
@@ -344,6 +668,46 @@
     "realName": "Russel Van Dulken"
   },
   {
+    "id": "magixx",
+    "nickname": "magixx",
+    "ovr": 78,
+    "role": "RIF",
+    "countryCode": "RU",
+    "team": "Spirit",
+    "period": {
+      "from": 2019
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 80,
+      "utl": 76,
+      "pos": 76,
+      "clu": 78
+    },
+    "dataSource": "estimated",
+    "realName": "Boris Vorobyev"
+  },
+  {
+    "id": "yuurih",
+    "nickname": "yuurih",
+    "ovr": 78,
+    "role": "RIF",
+    "countryCode": "BR",
+    "team": "FURIA",
+    "period": {
+      "from": 2018
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 82,
+      "utl": 72,
+      "pos": 76,
+      "clu": 78
+    },
+    "dataSource": "estimated",
+    "realName": "Yuri Santos"
+  },
+  {
     "id": "apex",
     "nickname": "apEX",
     "ovr": 77,
@@ -423,6 +787,89 @@
     },
     "dataSource": "estimated",
     "realName": "Andreas Højsleth"
+  },
+  {
+    "id": "mezii",
+    "nickname": "mezii",
+    "ovr": 77,
+    "role": "SUP",
+    "countryCode": "GB",
+    "team": "Vitality",
+    "period": {
+      "from": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 74,
+      "utl": 84,
+      "pos": 80,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "William Merriman"
+  },
+  {
+    "id": "nitr0",
+    "nickname": "nitr0",
+    "ovr": 77,
+    "role": "RIF",
+    "countryCode": "US",
+    "team": "Team Liquid",
+    "period": {
+      "from": 2015,
+      "to": 2020
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 80,
+      "utl": 76,
+      "pos": 76,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Nick Cannella"
+  },
+  {
+    "id": "cadian",
+    "nickname": "cadiaN",
+    "ovr": 77,
+    "role": "AWP",
+    "countryCode": "DK",
+    "team": "Heroic",
+    "period": {
+      "from": 2019,
+      "to": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 76,
+      "utl": 78,
+      "pos": 76,
+      "clu": 80
+    },
+    "dataSource": "estimated",
+    "realName": "Casper Møller"
+  },
+  {
+    "id": "neo",
+    "nickname": "NEO",
+    "ovr": 77,
+    "role": "LRK",
+    "countryCode": "PL",
+    "team": "FaZe Clan",
+    "period": {
+      "from": 2016,
+      "to": 2023
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 80,
+      "utl": 70,
+      "pos": 78,
+      "clu": 78
+    },
+    "dataSource": "estimated",
+    "realName": "Filip Kubski"
   },
   {
     "id": "fallen",
@@ -671,6 +1118,27 @@
     "realName": "Epitácio de Melo"
   },
   {
+    "id": "nbk",
+    "nickname": "NBK-",
+    "ovr": 75,
+    "role": "LRK",
+    "countryCode": "FR",
+    "team": "Team EnVyUs",
+    "period": {
+      "from": 2014,
+      "to": 2016
+    },
+    "rarity": "gold",
+    "stats": {
+      "aim": 78,
+      "utl": 74,
+      "pos": 78,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Nathan Schmitt"
+  },
+  {
     "id": "jks",
     "nickname": "jks",
     "ovr": 74,
@@ -731,6 +1199,109 @@
     "realName": "Ilya Zalutskiy"
   },
   {
+    "id": "edward",
+    "nickname": "Edward",
+    "ovr": 74,
+    "role": "SUP",
+    "countryCode": "UA",
+    "team": "NAVI",
+    "period": {
+      "from": 2010,
+      "to": 2019
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 70,
+      "utl": 82,
+      "pos": 76,
+      "clu": 72
+    },
+    "dataSource": "estimated",
+    "realName": "Ioann Sukhariev"
+  },
+  {
+    "id": "friberg",
+    "nickname": "friberg",
+    "ovr": 74,
+    "role": "SUP",
+    "countryCode": "SE",
+    "team": "NiP",
+    "period": {
+      "from": 2012,
+      "to": 2017
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 76,
+      "utl": 78,
+      "pos": 76,
+      "clu": 72
+    },
+    "dataSource": "estimated",
+    "realName": "Adam Friberg"
+  },
+  {
+    "id": "chopper",
+    "nickname": "chopper",
+    "ovr": 74,
+    "role": "IGL",
+    "countryCode": "RU",
+    "team": "Spirit",
+    "period": {
+      "from": 2019
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 64,
+      "utl": 85,
+      "pos": 66,
+      "clu": 60
+    },
+    "dataSource": "estimated",
+    "realName": "Leonid Vishnyakov"
+  },
+  {
+    "id": "art",
+    "nickname": "arT",
+    "ovr": 74,
+    "role": "IGL",
+    "countryCode": "BR",
+    "team": "FURIA",
+    "period": {
+      "from": 2018
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 70,
+      "utl": 80,
+      "pos": 64,
+      "clu": 66
+    },
+    "dataSource": "estimated",
+    "realName": "Andrei Piovezan"
+  },
+  {
+    "id": "dennis",
+    "nickname": "dennis",
+    "ovr": 74,
+    "role": "RIF",
+    "countryCode": "SE",
+    "team": "Fnatic",
+    "period": {
+      "from": 2014,
+      "to": 2018
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 79,
+      "utl": 72,
+      "pos": 72,
+      "clu": 74
+    },
+    "dataSource": "estimated",
+    "realName": "Dennis Edman"
+  },
+  {
     "id": "zeus",
     "nickname": "Zeus",
     "ovr": 73,
@@ -750,6 +1321,27 @@
     },
     "dataSource": "estimated",
     "realName": "Danylo Teslenko"
+  },
+  {
+    "id": "hobbit",
+    "nickname": "Hobbit",
+    "ovr": 73,
+    "role": "LRK",
+    "countryCode": "KZ",
+    "team": "Gambit",
+    "period": {
+      "from": 2016,
+      "to": 2020
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 76,
+      "utl": 72,
+      "pos": 78,
+      "clu": 76
+    },
+    "dataSource": "estimated",
+    "realName": "Abay Khassenov"
   },
   {
     "id": "dupreeh",
@@ -791,6 +1383,90 @@
     },
     "dataSource": "estimated",
     "realName": "Richard Papillon"
+  },
+  {
+    "id": "boombl4",
+    "nickname": "Boombl4",
+    "ovr": 72,
+    "role": "IGL",
+    "countryCode": "RU",
+    "team": "NAVI",
+    "period": {
+      "from": 2019,
+      "to": 2022
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 70,
+      "utl": 82,
+      "pos": 68,
+      "clu": 64
+    },
+    "dataSource": "estimated",
+    "realName": "Kirill Mikhailov"
+  },
+  {
+    "id": "starix",
+    "nickname": "Starix",
+    "ovr": 72,
+    "role": "SUP",
+    "countryCode": "UA",
+    "team": "NAVI",
+    "period": {
+      "from": 2012,
+      "to": 2018
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 68,
+      "utl": 80,
+      "pos": 74,
+      "clu": 70
+    },
+    "dataSource": "estimated",
+    "realName": "Sergey Ishchuk"
+  },
+  {
+    "id": "xizt",
+    "nickname": "Xizt",
+    "ovr": 72,
+    "role": "IGL",
+    "countryCode": "SE",
+    "team": "NiP",
+    "period": {
+      "from": 2012,
+      "to": 2017
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 66,
+      "utl": 82,
+      "pos": 66,
+      "clu": 64
+    },
+    "dataSource": "estimated",
+    "realName": "Richard Landström"
+  },
+  {
+    "id": "happy",
+    "nickname": "Happy",
+    "ovr": 72,
+    "role": "IGL",
+    "countryCode": "FR",
+    "team": "Team EnVyUs",
+    "period": {
+      "from": 2014,
+      "to": 2016
+    },
+    "rarity": "silver",
+    "stats": {
+      "aim": 74,
+      "utl": 82,
+      "pos": 68,
+      "clu": 66
+    },
+    "dataSource": "estimated",
+    "realName": "Vincent Cayonte"
   },
   {
     "id": "stewie2k",
