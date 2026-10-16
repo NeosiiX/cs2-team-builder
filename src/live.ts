@@ -1,4 +1,6 @@
 import type { Player, Role } from './types';
+import type { MapDef, Vec } from './maps';
+import { findPath, randomIn, scatter, rectCenter, pathLength } from './maps';
 
 /**
  * Moteur du match en direct (sans DOM).
@@ -9,106 +11,9 @@ import type { Player, Role } from './types';
 
 export type Side = 'CT' | 'T';
 export type Rng = () => number;
-export interface Vec { x: number; y: number }
-
-/* ---------- la carte (originale, dessinée pour le jeu) ---------- */
-export const MAP = { w: 1000, h: 760, name: 'Cobalt Yard' };
-
-export interface Room { k: 'A' | 'B' | 'T' | 'CT' | 'M'; x: number; y: number; w: number; h: number }
-export const ROOMS: Room[] = [
-  { k: 'A', x: 70, y: 60, w: 260, h: 190 },
-  { k: 'B', x: 690, y: 500, w: 240, h: 200 },
-  { k: 'T', x: 50, y: 540, w: 190, h: 180 },
-  { k: 'CT', x: 770, y: 50, w: 190, h: 170 },
-  { k: 'M', x: 440, y: 335, w: 160, h: 120 },
-];
-const room = (k: Room['k']) => ROOMS.find((r) => r.k === k)!;
-
-/** Caisses décoratives, placées en bordure des zones. */
-export const CRATES: { x: number; y: number; s: number }[] = [
-  { x: 90, y: 78, s: 30 }, { x: 288, y: 78, s: 30 }, { x: 96, y: 206, s: 26 },
-  { x: 712, y: 520, s: 32 }, { x: 892, y: 520, s: 28 }, { x: 898, y: 660, s: 30 }, { x: 734, y: 668, s: 26 },
-  { x: 452, y: 348, s: 24 }, { x: 560, y: 420, s: 24 },
-  { x: 70, y: 560, s: 28 }, { x: 790, y: 70, s: 26 },
-];
-
-export const NODES: Record<string, Vec> = {
-  tS: { x: 145, y: 630 }, lA1: { x: 140, y: 470 }, lA2: { x: 140, y: 330 }, aEntry: { x: 175, y: 240 },
-  aSite: { x: 200, y: 155 }, tMid1: { x: 300, y: 560 }, tMid2: { x: 410, y: 470 }, mid: { x: 520, y: 395 },
-  aShort: { x: 400, y: 275 }, aShortEnd: { x: 325, y: 195 }, midCT: { x: 640, y: 300 }, ctMid: { x: 740, y: 200 },
-  ctS: { x: 865, y: 135 }, ctCorr: { x: 680, y: 120 }, ctA: { x: 450, y: 125 },
-  bApp1: { x: 260, y: 690 }, bApp2: { x: 480, y: 690 }, bEntry: { x: 690, y: 640 }, bSite: { x: 810, y: 600 },
-  midB: { x: 600, y: 510 }, bMidEnd: { x: 690, y: 560 }, bTop: { x: 850, y: 510 }, bCT: { x: 850, y: 430 }, bCT2: { x: 860, y: 230 },
-};
-
-export const EDGES: [string, string][] = [
-  ['tS', 'lA1'], ['lA1', 'lA2'], ['lA2', 'aEntry'], ['aEntry', 'aSite'],
-  ['tS', 'tMid1'], ['tMid1', 'tMid2'], ['tMid2', 'mid'],
-  ['mid', 'aShort'], ['aShort', 'aShortEnd'], ['aShortEnd', 'aSite'],
-  ['mid', 'midCT'], ['midCT', 'ctMid'], ['ctMid', 'ctS'],
-  ['ctS', 'ctCorr'], ['ctCorr', 'ctA'], ['ctA', 'aSite'],
-  ['tS', 'bApp1'], ['bApp1', 'bApp2'], ['bApp2', 'bEntry'], ['bEntry', 'bSite'],
-  ['mid', 'midB'], ['midB', 'bMidEnd'], ['bMidEnd', 'bSite'],
-  ['bSite', 'bTop'], ['bTop', 'bCT'], ['bCT', 'bCT2'], ['bCT2', 'ctS'],
-];
+export type { Vec };
 
 const dist = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
-
-const ADJ: Record<string, { to: string; d: number }[]> = {};
-for (const id of Object.keys(NODES)) ADJ[id] = [];
-for (const [a, b] of EDGES) {
-  const d = dist(NODES[a], NODES[b]);
-  ADJ[a].push({ to: b, d });
-  ADJ[b].push({ to: a, d });
-}
-
-export function nearestNode(p: Vec): string {
-  let best = 'tS';
-  let bd = Infinity;
-  for (const [id, n] of Object.entries(NODES)) {
-    const d = dist(p, n);
-    if (d < bd) { bd = d; best = id; }
-  }
-  return best;
-}
-
-export function shortestPath(from: string, to: string): string[] {
-  const d: Record<string, number> = {};
-  const prev: Record<string, string> = {};
-  const todo = new Set(Object.keys(NODES));
-  for (const id of todo) d[id] = Infinity;
-  d[from] = 0;
-  while (todo.size) {
-    let u = '';
-    let ud = Infinity;
-    for (const id of todo) if (d[id] < ud) { ud = d[id]; u = id; }
-    if (!u || u === to) break;
-    todo.delete(u);
-    for (const e of ADJ[u]) {
-      if (d[u] + e.d < d[e.to]) { d[e.to] = d[u] + e.d; prev[e.to] = u; }
-    }
-  }
-  const out = [to];
-  while (out[0] !== from && prev[out[0]]) out.unshift(prev[out[0]]);
-  return out;
-}
-
-const SITE_NODE = { A: 'aSite', B: 'bSite' } as const;
-const ROUTES: Record<'A' | 'B', string[][]> = {
-  A: [['tS', 'lA1', 'lA2', 'aEntry', 'aSite'], ['tS', 'tMid1', 'tMid2', 'mid', 'aShort', 'aShortEnd', 'aSite']],
-  B: [['tS', 'bApp1', 'bApp2', 'bEntry', 'bSite'], ['tS', 'tMid1', 'tMid2', 'mid', 'midB', 'bMidEnd', 'bSite']],
-};
-
-const pathLen = (pts: Vec[], from: Vec) => {
-  let l = 0;
-  let p = from;
-  for (const q of pts) { l += dist(p, q); p = q; }
-  return l;
-};
-
-function randIn(r: Room, margin: number, rng: Rng): Vec {
-  return { x: r.x + margin + rng() * (r.w - 2 * margin), y: r.y + margin + rng() * (r.h - 2 * margin) };
-}
 
 /* ---------- scénarios de manche ---------- */
 type EndType = 'elim' | 'bomb' | 'defuse';
@@ -252,9 +157,11 @@ export class LiveMatch {
   readonly mine: Player[];
   readonly opp: Player[];
   readonly finalScore: [number, number];
+  readonly map: MapDef;
   private rng: Rng;
 
-  constructor(mine: Player[], opp: Player[], finalScore: [number, number], rng: Rng = Math.random) {
+  constructor(mine: Player[], opp: Player[], finalScore: [number, number], map: MapDef, rng: Rng = Math.random) {
+    this.map = map;
     this.mine = mine;
     this.opp = opp;
     this.finalScore = finalScore;
@@ -303,8 +210,6 @@ export class LiveMatch {
     this.nextAt = 0;
     this.target = this.rng() < 0.5 ? 'A' : 'B';
 
-    const tSpawn = room('T');
-    const ctSpawn = room('CT');
     for (const u of this.units) {
       const side = this.sideOf(u.team);
       u.alive = true;
@@ -313,8 +218,8 @@ export class LiveMatch {
       u.hold = null;
       u.wander = 1 + this.rng() * 2;
       u.site = null;
-      u.pos = randIn(side === 'T' ? tSpawn : ctSpawn, 28, this.rng);
-      u.speed = 33 + this.rng() * 5;
+      u.pos = randomIn(this.map, side === 'T' ? this.map.tSpawn : this.map.ctSpawn, this.rng, 10);
+      u.speed = this.runSpeed();
       u.angle = side === 'T' ? -0.9 : 2.2;
       if (pistol) u.money = 800;
       // achats : pistolet, full buy, demi-achat ou éco selon l'argent
@@ -329,24 +234,35 @@ export class LiveMatch {
     if (this.round === 1) this.chatLine(5 + Math.floor(this.rng() * 5), 'glhf');
   }
 
+  private runSpeed(): number {
+    return (33 + this.rng() * 5) * 1.5;
+  }
+
+  private pathTo(from: Vec, to: Vec): Vec[] {
+    return findPath(this.map, from, to);
+  }
+
   /** Les T prennent leurs routes vers le site visé, les CT se répartissent. */
   private assignPlan() {
     const site = this.target;
-    const siteRoom = room(site);
     const ts = this.units.filter((u) => this.sideOf(u.team) === 'T');
     const cts = this.units.filter((u) => this.sideOf(u.team) === 'CT');
     const primary = this.rng() < 0.5 ? 0 : 1;
     shuffle(ts, this.rng).forEach((u, i) => {
-      const route = ROUTES[site][i < 3 ? primary : 1 - primary];
-      const pts = route.slice(1, -1).map((id) => ({ ...NODES[id] }));
-      const end = randIn(siteRoom, 34, this.rng);
-      pts.push(end);
+      const via = this.map.routes[site][i < 3 ? primary : 1 - primary];
+      const end = randomIn(this.map, this.map.sites[site], this.rng, 6);
+      const pts: Vec[] = [];
+      let from = u.pos;
+      for (const wp of [...via, end]) {
+        pts.push(...this.pathTo(from, wp));
+        from = wp;
+      }
       u.path = pts;
       u.hold = end;
       u.site = site;
     });
     let longest = 0;
-    for (const u of ts) longest = Math.max(longest, pathLen(u.path, u.pos) / u.speed);
+    for (const u of ts) longest = Math.max(longest, pathLength(u.path, u.pos) / u.speed);
     this.rotateAt = Math.max(2, longest - 9);
     this.nextAt = Math.max(5, longest - 2 + this.rng() * 3);
 
@@ -355,20 +271,10 @@ export class LiveMatch {
     shuffle(cts, this.rng).forEach((u, i) => {
       const s = spots[i];
       u.site = s;
-      if (s === 'M') {
-        const hold = { x: 585 + (this.rng() - 0.5) * 40, y: 330 + (this.rng() - 0.5) * 40 };
-        u.path = [...this.graphPath(u.pos, 'midCT'), hold];
-        u.hold = hold;
-      } else {
-        const hold = randIn(room(s), 34, this.rng);
-        u.path = [...this.graphPath(u.pos, SITE_NODE[s]).slice(0, -1), hold];
-        u.hold = hold;
-      }
+      const hold = s === 'M' ? scatter(this.map, this.map.mid, 22, this.rng) : randomIn(this.map, this.map.sites[s], this.rng, 6);
+      u.path = this.pathTo(u.pos, hold);
+      u.hold = hold;
     });
-  }
-
-  private graphPath(from: Vec, toNode: string): Vec[] {
-    return shortestPath(nearestNode(from), toNode).map((id) => ({ ...NODES[id] }));
   }
 
   private chatLine(from: number, text: string) {
@@ -415,13 +321,13 @@ export class LiveMatch {
         u.wander -= dt;
         if (u.wander <= 0) {
           u.wander = 1.5 + this.rng() * 2.5;
-          u.path = [{ x: u.hold.x + (this.rng() - 0.5) * 36, y: u.hold.y + (this.rng() - 0.5) * 36 }];
-          u.speed = 12 + this.rng() * 6;
+          u.path = [scatter(this.map, u.hold, 18, this.rng)];
+          u.speed = (12 + this.rng() * 6) * 1.5;
         }
       }
-      if (!u.path.length || u.speed < 20) {
+      if (!u.path.length || u.speed < 30) {
         const foe = this.nearestEnemy(u);
-        if (foe && dist(u.pos, foe.pos) < 260) u.angle = Math.atan2(foe.pos.y - u.pos.y, foe.pos.x - u.pos.x);
+        if (foe && dist(u.pos, foe.pos) < 300) u.angle = Math.atan2(foe.pos.y - u.pos.y, foe.pos.x - u.pos.x);
       }
     }
   }
@@ -458,7 +364,7 @@ export class LiveMatch {
 
     if (this.stage === 'approach' || this.stage === 'planted') {
       const forced = this.t > ROUND_TIME - 6 || (this.stage === 'planted' && this.bombLeft < 9);
-      if (this.queue.length && (forced || (this.t >= this.nextAt && (this.closestPairDist() < 190 || this.t > this.nextAt + 9)))) {
+      if (this.queue.length && (forced || (this.t >= this.nextAt && (this.closestPairDist() < 230 || this.t > this.nextAt + 9)))) {
         this.fireKill(this.queue.shift()!);
         this.nextAt = this.t + (this.stage === 'planted' ? 1.5 + this.rng() * 2.5 : 2 + this.rng() * 4);
         if (this.phase !== 'live') return;
@@ -497,26 +403,25 @@ export class LiveMatch {
     const site = this.target;
     for (const u of this.alive('CT')) {
       if (u.site === site) continue;
-      const hold = randIn(room(site), 34, this.rng);
-      u.path = [...this.graphPath(u.pos, SITE_NODE[site]).slice(0, -1), hold];
+      const hold = randomIn(this.map, this.map.sites[site], this.rng, 6);
+      u.path = this.pathTo(u.pos, hold);
       u.hold = hold;
       u.site = site;
-      u.speed = 33 + this.rng() * 5;
+      u.speed = this.runSpeed();
     }
   }
 
   private beginPlant() {
     const tAlive = this.alive('T');
     if (!tAlive.length) return;
-    const spot = NODES[SITE_NODE[this.target]];
-    const planter = tAlive.reduce((a, b) => (dist(a.pos, spot) < dist(b.pos, spot) ? a : b));
-    const bombPos = { x: spot.x + 22, y: spot.y + 14 };
+    const bombPos = { ...this.map.bomb[this.target] };
+    const planter = tAlive.reduce((a, b) => (dist(a.pos, bombPos) < dist(b.pos, bombPos) ? a : b));
     this.actor = planter;
     this.stage = 'planting';
     this.actionLeft = PLANT_TIME;
-    planter.path = [bombPos];
+    planter.path = this.pathTo(planter.pos, bombPos);
     planter.hold = bombPos;
-    planter.speed = 34;
+    planter.speed = this.runSpeed();
     this.bombPos = bombPos;
   }
 
@@ -530,22 +435,23 @@ export class LiveMatch {
     if (this.script.end === 'bomb') {
       // les CT survivants ne peuvent plus retourner la situation : ils économisent leur arme
       for (const u of this.alive('CT')) {
-        u.path = this.graphPath(u.pos, 'ctS');
-        u.hold = { ...NODES.ctS };
-        u.speed = 34;
+        const safe = rectCenter(this.map.ctSpawn);
+        u.path = this.pathTo(u.pos, safe);
+        u.hold = safe;
+        u.speed = this.runSpeed();
       }
     } else {
       for (const u of this.alive('CT')) {
-        const hold = { x: this.bombPos!.x + (this.rng() - 0.5) * 120, y: this.bombPos!.y + (this.rng() - 0.5) * 100 };
-        u.path = [...this.graphPath(u.pos, SITE_NODE[this.target]).slice(0, -1), hold];
+        const hold = scatter(this.map, this.bombPos!, 70, this.rng);
+        u.path = this.pathTo(u.pos, hold);
         u.hold = hold;
-        u.speed = 35;
+        u.speed = this.runSpeed();
       }
       for (const u of this.alive('T')) {
-        const hold = { x: this.bombPos!.x + (this.rng() - 0.5) * 140, y: this.bombPos!.y + (this.rng() - 0.5) * 120 };
-        u.path = [hold];
+        const hold = scatter(this.map, this.bombPos!, 70, this.rng);
+        u.path = this.pathTo(u.pos, hold);
         u.hold = hold;
-        u.speed = 34;
+        u.speed = this.runSpeed();
       }
       this.nextAt = this.t + 4 + this.rng() * 3;
     }
@@ -559,9 +465,9 @@ export class LiveMatch {
     this.actor = d;
     this.stage = 'defusing';
     this.actionLeft = DEFUSE_TIME;
-    d.path = [{ x: bomb.x - 14, y: bomb.y }];
-    d.hold = d.path[0];
-    d.speed = 38;
+    d.path = this.pathTo(d.pos, bomb);
+    d.hold = bomb;
+    d.speed = this.runSpeed() * 1.1;
   }
 
   private fireKill(victimSide: Side) {

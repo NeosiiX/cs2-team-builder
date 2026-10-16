@@ -9,6 +9,7 @@ import { RARITIES, DUPLICATE_REFUND, effectiveOdds, rollPlayer, fmtPct } from '.
 import type { PackDef } from './packs';
 import { MODES, modeById, simulateMatch, averageWinChance, winChance, cooldownLeft, fmtCountdown, fmtCooldown } from './play';
 import { LiveMatch, buildOpponentRoster } from './live';
+import { MAPS } from './maps';
 import { startLive } from './live-ui';
 import type { ModeDef } from './play';
 
@@ -665,7 +666,7 @@ function playMatch(id: ModeId) {
   // match en direct : ton équipe à gauche, l'adversaire à droite, la carte au centre
   const team = teamPlayers();
   const mine = SLOTS.filter((sl) => sl.role).map((sl) => team[sl.id]!);
-  const live = new LiveMatch(mine, buildOpponentRoster(players, mine, out.opponent.ovr), [out.myScore, out.oppScore]);
+  const live = new LiveMatch(mine, buildOpponentRoster(players, mine, out.opponent.ovr), [out.myScore, out.oppScore], MAPS[Math.floor(Math.random() * MAPS.length)]);
   matching = true;
   startLive({
     dialog: liveDialog,

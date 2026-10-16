@@ -1,5 +1,4 @@
-import { LiveMatch, MAP, ROOMS, CRATES, EDGES, NODES } from './live';
-import type { Unit, Side, LiveEvent, Vec } from './live';
+import type { LiveMatch, Unit, Side, LiveEvent, Vec } from './live';
 import type { Player } from './types';
 
 /**
@@ -25,87 +24,6 @@ const REASON: Record<string, string> = { elim: 'équipe adverse éliminée', bom
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const fmtClock = (s: number) => `${Math.floor(Math.ceil(s) / 60)}:${String(Math.ceil(s) % 60).padStart(2, '0')}`;
-
-/* ---------- la carte, dessinée une seule fois ---------- */
-function buildMapLayer(scale: number): HTMLCanvasElement {
-  const W = MAP.w * scale;
-  const H = MAP.h * scale;
-  const floor = document.createElement('canvas');
-  floor.width = W;
-  floor.height = H;
-  const f = floor.getContext('2d')!;
-  f.scale(scale, scale);
-  f.lineCap = 'round';
-  f.lineJoin = 'round';
-
-  // murs puis sols des couloirs
-  f.strokeStyle = '#1d1810';
-  f.lineWidth = 76;
-  for (const [a, b] of EDGES) { f.beginPath(); f.moveTo(NODES[a].x, NODES[a].y); f.lineTo(NODES[b].x, NODES[b].y); f.stroke(); }
-  for (const r of ROOMS) { f.fillStyle = '#1d1810'; f.beginPath(); f.roundRect(r.x - 9, r.y - 9, r.w + 18, r.h + 18, 14); f.fill(); }
-  f.strokeStyle = '#5f523a';
-  f.lineWidth = 58;
-  for (const [a, b] of EDGES) { f.beginPath(); f.moveTo(NODES[a].x, NODES[a].y); f.lineTo(NODES[b].x, NODES[b].y); f.stroke(); }
-  const tint: Record<string, string> = { A: '#6d5a3c', B: '#6d5a3c', T: '#5d5038', CT: '#56503f', M: '#635640' };
-  for (const r of ROOMS) { f.fillStyle = tint[r.k]; f.beginPath(); f.roundRect(r.x, r.y, r.w, r.h, 8); f.fill(); }
-  const wash: Record<string, string> = { T: 'rgba(240,177,58,0.13)', CT: 'rgba(90,162,255,0.15)' };
-  for (const r of ROOMS) if (wash[r.k]) { f.fillStyle = wash[r.k]; f.beginPath(); f.roundRect(r.x, r.y, r.w, r.h, 8); f.fill(); }
-
-  // grain du sol (graine fixe)
-  f.globalCompositeOperation = 'source-atop';
-  let seed = 7;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < 2600; i++) {
-    f.fillStyle = rnd() < 0.5 ? 'rgba(255,240,200,0.045)' : 'rgba(0,0,0,0.09)';
-    f.fillRect(rnd() * MAP.w, rnd() * MAP.h, 2 + rnd() * 5, 1 + rnd() * 3);
-  }
-  f.globalCompositeOperation = 'source-over';
-
-  // zones de bombe
-  for (const k of ['A', 'B'] as const) {
-    const r = ROOMS.find((x) => x.k === k)!;
-    const cx = r.x + r.w / 2;
-    const cy = r.y + r.h / 2;
-    f.fillStyle = 'rgba(214,72,60,0.14)';
-    f.fillRect(cx - 52, cy - 52, 104, 104);
-    f.strokeStyle = 'rgba(255,110,90,0.45)';
-    f.lineWidth = 2;
-    f.setLineDash([7, 6]);
-    f.strokeRect(cx - 52, cy - 52, 104, 104);
-    f.setLineDash([]);
-    f.fillStyle = 'rgba(255,120,100,0.34)';
-    f.font = '800 70px "Barlow Condensed", sans-serif';
-    f.textAlign = 'center';
-    f.textBaseline = 'middle';
-    f.fillText(k, cx, cy + 3);
-  }
-  // caisses
-  for (const c of CRATES) {
-    f.fillStyle = '#44372a';
-    f.fillRect(c.x, c.y, c.s, c.s);
-    f.strokeStyle = '#17110a';
-    f.lineWidth = 2;
-    f.strokeRect(c.x, c.y, c.s, c.s);
-    f.beginPath(); f.moveTo(c.x, c.y); f.lineTo(c.x + c.s, c.y + c.s); f.moveTo(c.x + c.s, c.y); f.lineTo(c.x, c.y + c.s); f.stroke();
-  }
-  // étiquettes
-  f.font = '700 18px "Barlow Condensed", sans-serif';
-  f.fillStyle = 'rgba(240,177,58,0.55)';
-  f.fillText('T SPAWN', 145, 560);
-  f.fillStyle = 'rgba(90,162,255,0.6)';
-  f.fillText('CT SPAWN', 865, 72);
-  f.fillStyle = 'rgba(255,255,255,0.28)';
-  f.fillText('MID', 520, 345);
-
-  const out = document.createElement('canvas');
-  out.width = W;
-  out.height = H;
-  const o = out.getContext('2d')!;
-  o.fillStyle = '#000';
-  o.fillRect(0, 0, W, H);
-  o.drawImage(floor, 0, 0);
-  return out;
-}
 
 interface Shot { from: Vec; to: Vec; born: number }
 interface Line { html: string; born: number }
@@ -148,7 +66,7 @@ export function startLive(opts: LiveUIOptions) {
       ${panelHTML(mineUnits, 'left')}
       <div class="lm">
         <canvas></canvas>
-        <div class="lm-name">${esc(MAP.name)}</div>
+        <div class="lm-name">${esc(m.map.name)}</div>
         <div class="lm-feed"></div>
         <div class="lm-notice"></div>
         <div class="lm-banner"></div>
@@ -196,7 +114,9 @@ export function startLive(opts: LiveUIOptions) {
   const shots: Shot[] = [];
   const feed: Line[] = [];
   const chat: Line[] = [];
-  let layer: HTMLCanvasElement | null = null;
+  const img = new Image();
+  img.src = m.map.image;
+  const U = 1.3; // taille des repères à l'écran, en pixels du radar
   let view = { s: 1, ox: 0, oy: 0, dpr: 1 };
 
   const unitSide = (u: Unit): Side => m.sideOf(u.team);
@@ -208,9 +128,9 @@ export function startLive(opts: LiveUIOptions) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas.width = Math.max(1, Math.round(box.width * dpr));
     canvas.height = Math.max(1, Math.round(box.height * dpr));
-    const s = Math.min(canvas.width / MAP.w, canvas.height / MAP.h);
-    view = { s, ox: (canvas.width - MAP.w * s) / 2, oy: (canvas.height - MAP.h * s) / 2, dpr };
-    layer = buildMapLayer(Math.max(1, Math.min(2.5, s)));
+    const v = m.map.view;
+    const s = Math.min(canvas.width / v.w, canvas.height / v.h);
+    view = { s, ox: (canvas.width - v.w * s) / 2, oy: (canvas.height - v.h * s) / 2, dpr };
   }
   const ro = new ResizeObserver(resize);
   ro.observe(canvas.parentElement!);
@@ -317,65 +237,65 @@ export function startLive(opts: LiveUIOptions) {
   }
 
   function draw(now: number) {
-    if (!layer) return;
+    const v = m.map.view;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = '#111';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(layer, view.ox, view.oy, MAP.w * view.s, MAP.h * view.s);
-    ctx.setTransform(view.s, 0, 0, view.s, view.ox, view.oy);
+    if (img.complete && img.naturalWidth) ctx.drawImage(img, v.x, v.y, v.w, v.h, view.ox, view.oy, v.w * view.s, v.h * view.s);
+    ctx.setTransform(view.s, 0, 0, view.s, view.ox - v.x * view.s, view.oy - v.y * view.s);
 
     // bombe
     if (m.bombPos && (m.stage !== 'ended' || m.phase !== 'freeze')) {
       const b = m.bombPos;
       const pulse = 0.5 + 0.5 * Math.sin(now / 160);
       ctx.fillStyle = `rgba(255,70,60,${0.12 + 0.2 * pulse})`;
-      ctx.beginPath(); ctx.arc(b.x, b.y, 14 + 8 * pulse, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(b.x, b.y, (14 + 8 * pulse) * U, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = m.stage === 'defusing' ? '#6cb7ff' : '#ff4a3d';
-      ctx.fillRect(b.x - 6, b.y - 4, 12, 8);
-      ctx.strokeStyle = '#0b0b0b'; ctx.lineWidth = 1.5; ctx.strokeRect(b.x - 6, b.y - 4, 12, 8);
+      ctx.fillRect(b.x - 6 * U, b.y - 4 * U, 12 * U, 8 * U);
+      ctx.strokeStyle = '#0b0b0b'; ctx.lineWidth = 1.5 * U; ctx.strokeRect(b.x - 6 * U, b.y - 4 * U, 12 * U, 8 * U);
     }
 
     const alive = m.units.filter((u) => u.alive);
     for (const u of m.units) {
       if (u.alive) continue;
       ctx.strokeStyle = 'rgba(190,190,190,0.55)';
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 2.5 * U;
       ctx.beginPath();
-      ctx.moveTo(u.pos.x - 5, u.pos.y - 5); ctx.lineTo(u.pos.x + 5, u.pos.y + 5);
-      ctx.moveTo(u.pos.x + 5, u.pos.y - 5); ctx.lineTo(u.pos.x - 5, u.pos.y + 5);
+      ctx.moveTo(u.pos.x - 5 * U, u.pos.y - 5 * U); ctx.lineTo(u.pos.x + 5 * U, u.pos.y + 5 * U);
+      ctx.moveTo(u.pos.x + 5 * U, u.pos.y - 5 * U); ctx.lineTo(u.pos.x - 5 * U, u.pos.y + 5 * U);
       ctx.stroke();
     }
     for (const u of alive) {
       const col = color(u);
-      const g = ctx.createRadialGradient(u.pos.x, u.pos.y, 4, u.pos.x, u.pos.y, 58);
+      const g = ctx.createRadialGradient(u.pos.x, u.pos.y, 4 * U, u.pos.x, u.pos.y, 62 * U);
       g.addColorStop(0, col + '55');
       g.addColorStop(1, col + '00');
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.moveTo(u.pos.x, u.pos.y);
-      ctx.arc(u.pos.x, u.pos.y, 58, u.angle - 0.5, u.angle + 0.5);
+      ctx.arc(u.pos.x, u.pos.y, 62 * U, u.angle - 0.5, u.angle + 0.5);
       ctx.closePath();
       ctx.fill();
     }
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.font = '700 12px Barlow, "Segoe UI", sans-serif';
+    ctx.font = `700 ${12 * U}px Barlow, "Segoe UI", sans-serif`;
     for (const u of alive) {
       const col = color(u);
       ctx.fillStyle = col;
-      ctx.beginPath(); ctx.arc(u.pos.x, u.pos.y, 8, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = u.team === 0 ? 2.5 : 1.8;
+      ctx.beginPath(); ctx.arc(u.pos.x, u.pos.y, 8 * U, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = (u.team === 0 ? 2.5 : 1.8) * U;
       ctx.strokeStyle = u.team === 0 ? '#ffffff' : '#0b1220';
       ctx.stroke();
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 3 * U;
       ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-      ctx.strokeText(u.name, u.pos.x, u.pos.y - 18);
+      ctx.strokeText(u.name, u.pos.x, u.pos.y - 19 * U);
       ctx.fillStyle = '#fff';
-      ctx.fillText(u.name, u.pos.x, u.pos.y - 18);
+      ctx.fillText(u.name, u.pos.x, u.pos.y - 19 * U);
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(u.pos.x - 13, u.pos.y - 15, 26, 3);
+      ctx.fillRect(u.pos.x - 13 * U, u.pos.y - 15 * U, 26 * U, 3 * U);
       ctx.fillStyle = col;
-      ctx.fillRect(u.pos.x - 13, u.pos.y - 15, (26 * u.hp) / 100, 3);
+      ctx.fillRect(u.pos.x - 13 * U, u.pos.y - 15 * U, (26 * U * u.hp) / 100, 3 * U);
     }
     // tirs
     for (let i = shots.length - 1; i >= 0; i--) {
@@ -384,10 +304,10 @@ export function startLive(opts: LiveUIOptions) {
       const a = 1 - age / 320;
       const s = shots[i];
       ctx.strokeStyle = `rgba(255,236,150,${a})`;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2 * U;
       ctx.beginPath(); ctx.moveTo(s.from.x, s.from.y); ctx.lineTo(s.to.x, s.to.y); ctx.stroke();
       ctx.fillStyle = `rgba(255,90,70,${a * 0.7})`;
-      ctx.beginPath(); ctx.arc(s.to.x, s.to.y, 6 + 14 * (1 - a), 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(s.to.x, s.to.y, (6 + 14 * (1 - a)) * U, 0, Math.PI * 2); ctx.fill();
     }
   }
 
