@@ -265,6 +265,38 @@ export function startLive(opts: LiveUIOptions) {
       ctx.strokeStyle = '#0b0b0b'; ctx.lineWidth = 1.5 * U; ctx.strokeRect(b.x - 6 * U, b.y - 4 * U, 12 * U, 8 * U);
     }
 
+    // fumigènes : grenade en vol puis nuage gris
+    for (const sm of m.smokes) {
+      if (m.t < sm.land) {
+        const k = Math.max(0, (m.t - sm.thrown) / (sm.land - sm.thrown));
+        const x = sm.from.x + (sm.to.x - sm.from.x) * k;
+        const y = sm.from.y + (sm.to.y - sm.from.y) * k - Math.sin(k * Math.PI) * 26 * U;
+        ctx.fillStyle = '#d9dee6';
+        ctx.beginPath(); ctx.arc(x, y, 2.6 * U, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1 * U; ctx.stroke();
+        continue;
+      }
+      const r = m.smokeRadius(sm);
+      if (r <= 0) continue;
+      const fade = Math.min(1, (sm.until - m.t) / 2);
+      const seed = sm.to.x * 7 + sm.to.y * 13;
+      for (let i = 0; i < 6; i++) {
+        const a = seed + i * 1.7 + m.t * 0.05;
+        const ox = i ? Math.cos(a) * r * 0.32 : 0;
+        const oy = i ? Math.sin(a) * r * 0.32 : 0;
+        const rr = r * (i ? 0.62 : 1);
+        const g = ctx.createRadialGradient(sm.to.x + ox, sm.to.y + oy, rr * 0.15, sm.to.x + ox, sm.to.y + oy, rr);
+        g.addColorStop(0, `rgba(205,210,218,${0.55 * fade})`);
+        g.addColorStop(0.7, `rgba(180,186,196,${0.42 * fade})`);
+        g.addColorStop(1, 'rgba(170,176,186,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(sm.to.x + ox, sm.to.y + oy, rr, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.strokeStyle = `rgba(225,230,238,${0.35 * fade})`;
+      ctx.lineWidth = 1.2 * U;
+      ctx.beginPath(); ctx.arc(sm.to.x, sm.to.y, r * 0.92, 0, Math.PI * 2); ctx.stroke();
+    }
+
     // états visuels : dégâts reçus, tirs, aveuglement
     for (const u of m.units) {
       const prev = hpSeen.get(u.idx) ?? u.hp;

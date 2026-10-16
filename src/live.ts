@@ -125,6 +125,8 @@ export interface Unit {
   lostSight: number;
   lastShot: number;
   replan: number;
+  /** fumigène encore en poche */
+  smoke: boolean;
 }
 
 export type EndReason = 'elim' | 'bomb' | 'defuse' | 'time';
@@ -136,6 +138,20 @@ export type LiveEvent =
   | { type: 'roundEnd'; round: number; winTeam: 0 | 1; reason: EndReason }
   | { type: 'chat'; from: number; text: string }
   | { type: 'matchEnd' };
+
+/** Fumigène : lancé de `from` à `to`, atterrit à `land`, se dissipe à `until` (temps de manche). */
+export interface Smoke {
+  from: Vec;
+  to: Vec;
+  thrown: number;
+  land: number;
+  until: number;
+  team: 0 | 1;
+}
+export const SMOKE_RADIUS = 40;
+const SMOKE_FLIGHT = 1.1;
+const SMOKE_BLOOM = 0.9;
+const SMOKE_TIME = 18;
 
 export interface BombState {
   state: 'carried' | 'dropped' | 'planted' | 'defused' | 'exploded';
@@ -163,6 +179,7 @@ export class LiveMatch {
   freezeLeft = FREEZE;
   events: LiveEvent[] = [];
   bomb: BombState = { state: 'carried', pos: null, carrier: -1, site: null, timer: 0 };
+  smokes: Smoke[] = [];
 
   readonly mine: Player[];
   readonly opp: Player[];
@@ -175,6 +192,8 @@ export class LiveMatch {
   private rush = false;
   private lossStreak: [number, number] = [0, 0];
   private aiClock = 0;
+  private execSmokes: Vec[] = [];
+  private ctSmokeAt = -99;
 
   constructor(mine: Player[], opp: Player[], finalScore: [number, number], map: MapDef, rng: Rng = Math.random) {
     this.map = map;
@@ -188,7 +207,7 @@ export class LiveMatch {
         idx: i, team: i < 5 ? 0 : 1, player, name: player.nickname, pos: { x: 0, y: 0 }, path: [], speed: RUN, v: 0,
         heading: 0, angle: 0, watch: 0, flash: 0, hold: null, wander: 0, delay: 0, hp: 100, alive: true, kills: 0, deaths: 0,
         money: 800, weapon: 'pistol', site: null, task: 'move', action: 0, target: -1, react: 0, cooldown: 0, lostSight: 0,
-        lastShot: -99, replan: 0,
+        lastShot: -99, replan: 0, smoke: true,
       });
     });
     this.startRound();
@@ -229,6 +248,52 @@ export class LiveMatch {
     return Math.atan2(q.y - p.y, q.x - p.x);
   }
 
+  /** Point situé à `d` px le long du chemin de `a` vers `b`. */
+  private alongPath(a: Vec, b: Vec, d: number): Vec {
+    let p = a;
+    let left = d;
+    for (const q of this.pathTo(a, b)) {
+      const l = dist(p, q);
+      if (l >= left) return { x: p.x + ((q.x - p.x) / l) * left, y: p.y + ((q.y - p.y) / l) * left };
+      left -= l;
+      p = q;
+    }
+    return p;
+  }
+
+  /** Rayon actuel d'un fumigène (0 en vol, grossit à l'atterrissage, se dissipe à la fin). */
+  smokeRadius(s: Smoke, t = this.t): number {
+    if (t < s.land || t > s.until) return 0;
+    const grow = Math.min(1, (t - s.land) / SMOKE_BLOOM);
+    const fade = Math.min(1, (s.until - t) / 2);
+    return SMOKE_RADIUS * (0.35 + 0.65 * grow) * (0.6 + 0.4 * fade);
+  }
+
+  /** Vue dégagée : pas de mur, pas de caisse, pas de fumigène entre a et b. */
+  sees(a: Vec, b: Vec): boolean {
+    if (!gridOf(this.map).los(a, b)) return false;
+    if (dist(a, b) < 45) return true; // à bout portant, la fumée ne cache rien
+    for (const s of this.smokes) {
+      const r = this.smokeRadius(s) * 0.9;
+      if (r <= 0) continue;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const l2 = dx * dx + dy * dy || 1;
+      const k = Math.max(0, Math.min(1, ((s.to.x - a.x) * dx + (s.to.y - a.y) * dy) / l2));
+      if (Math.hypot(a.x + dx * k - s.to.x, a.y + dy * k - s.to.y) < r) return false;
+    }
+    return true;
+  }
+
+  private throwSmoke(u: Unit, to: Vec) {
+    if (!u.smoke) return;
+    u.smoke = false;
+    const target = scatter(this.map, to, 10, this.rng);
+    const flight = SMOKE_FLIGHT * Math.min(1.4, Math.max(0.6, dist(u.pos, target) / 300));
+    this.smokes.push({ from: { ...u.pos }, to: target, thrown: this.t, land: this.t + flight, until: this.t + flight + SMOKE_TIME, team: u.team });
+    u.angle = Math.atan2(target.y - u.pos.y, target.x - u.pos.x);
+  }
+
   /* ---------- début de manche ---------- */
   private startRound() {
     this.round += 1;
@@ -242,12 +307,14 @@ export class LiveMatch {
     this.rush = false;
     this.aiClock = 0;
     this.target = this.rng() < 0.5 ? 'A' : 'B';
+    this.smokes = [];
+    this.ctSmokeAt = -99;
 
     for (const u of this.units) {
       const side = this.sideOf(u.team);
       Object.assign(u, {
         alive: true, hp: 100, path: [], hold: null, site: null, task: 'move', action: 0, target: -1, react: 0,
-        cooldown: 0, lostSight: 0, lastShot: -99, flash: 0, v: 0, replan: 0,
+        cooldown: 0, lostSight: 0, lastShot: -99, flash: 0, v: 0, replan: 0, smoke: true,
         wander: 1 + this.rng() * 2, delay: side === 'T' ? this.rng() * 3 : this.rng() * 0.8,
       });
       u.pos = randomIn(this.map, side === 'T' ? this.map.tSpawn : this.map.ctSpawn, this.rng, 10);
@@ -292,6 +359,9 @@ export class LiveMatch {
       u.watch = this.watchFrom(end, ctSpawn);
       u.angle = u.heading = Math.atan2((pts[0]?.y ?? end.y) - u.pos.y, (pts[0]?.x ?? end.x) - u.pos.x);
     });
+    const sc = rectCenter(this.map.sites[site]);
+    this.execSmokes = [this.alongPath(sc, ctSpawn, 120), this.alongPath(sc, this.map.mid, 110)];
+
     const spots: ('A' | 'A' | 'B' | 'B' | 'M')[] = ['A', 'A', 'B', 'B', 'M'];
     shuffle(cts, this.rng).forEach((u, i) => {
       const s = spots[i];
@@ -341,6 +411,30 @@ export class LiveMatch {
 
   /* ---------- décisions (4 fois par seconde) ---------- */
   private think() {
+    // les T fument l'entrée CT et l'entrée mid du site en arrivant (les meilleurs en UTL d'abord)
+    if (!this.planted && this.execSmokes.length) {
+      const sc = rectCenter(this.map.sites[this.target]);
+      const throwers = this.alive('T')
+        .filter((u) => u.smoke && u.target < 0 && dist(u.pos, sc) < 340 && dist(u.pos, sc) > 90)
+        .sort((a, b) => b.player.stats.utl - a.player.stats.utl);
+      for (const u of throwers) {
+        if (!this.execSmokes.length) break;
+        if (this.rng() > 0.35 + u.player.stats.utl / 200) continue;
+        this.throwSmoke(u, this.execSmokes.shift()!);
+      }
+    }
+    // les CT fument une avancée ennemie repérée de loin
+    if (this.t - this.ctSmokeAt > 6) {
+      for (const u of this.alive('CT')) {
+        if (!u.smoke || u.target < 0) continue;
+        const e = this.units[u.target];
+        const d = dist(u.pos, e.pos);
+        if (d < 200 || this.rng() > (u.player.stats.utl / 100) * 0.5) continue;
+        this.throwSmoke(u, { x: u.pos.x + (e.pos.x - u.pos.x) * 0.6, y: u.pos.y + (e.pos.y - u.pos.y) * 0.6 });
+        this.ctSmokeAt = this.t;
+        break;
+      }
+    }
     // les CT tournent vers le site où au moins deux T sont repérés
     if (!this.rotated && !this.planted) {
       for (const s of ['A', 'B'] as const) {
@@ -431,8 +525,7 @@ export class LiveMatch {
   private canDefuse(u: Unit): boolean {
     const ts = this.alive('T');
     if (this.winSide === 'T' && ts.length) return false;
-    const g = gridOf(this.map);
-    return !ts.some((t) => dist(t.pos, u.pos) < 700 && g.los(t.pos, u.pos));
+    return !ts.some((t) => dist(t.pos, u.pos) < 700 && this.sees(t.pos, u.pos));
   }
 
   /** Fin de manche sans pose alors que les T doivent gagner : tout le monde fonce sur le site. */
@@ -503,7 +596,6 @@ export class LiveMatch {
 
   /* ---------- combat ---------- */
   private combat(dt: number) {
-    const g = gridOf(this.map);
     for (const u of this.units) {
       if (!u.alive) continue;
       u.flash = Math.max(0, u.flash - dt);
@@ -513,7 +605,7 @@ export class LiveMatch {
       if (u.target >= 0) {
         const t = this.units[u.target];
         if (!t.alive) u.target = -1;
-        else if (dist(u.pos, t.pos) < WEAPON[u.weapon].range && g.los(u.pos, t.pos)) u.lostSight = 0;
+        else if (dist(u.pos, t.pos) < WEAPON[u.weapon].range && this.sees(u.pos, t.pos)) u.lostSight = 0;
         else {
           u.lostSight += dt;
           if (u.lostSight > 0.7) u.target = -1;
@@ -528,7 +620,7 @@ export class LiveMatch {
           const d = dist(u.pos, e.pos);
           if (d >= WEAPON[u.weapon].range || d >= bd) continue;
           if (d > HEAR && angleDiff(u.angle, Math.atan2(e.pos.y - u.pos.y, e.pos.x - u.pos.x)) > FOV) continue;
-          if (!g.los(u.pos, e.pos)) continue;
+          if (!this.sees(u.pos, e.pos)) continue;
           best = e;
           bd = d;
         }
