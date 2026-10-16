@@ -7,7 +7,9 @@ import { computeChemistry, CHEM } from './chemistry';
 import { PACKS, RARITY_LABEL } from './packs';
 import { RARITIES, DUPLICATE_REFUND, effectiveOdds, rollPlayer, fmtPct } from './luck';
 import type { PackDef } from './packs';
-import { MODES, modeById, simulateMatch, averageWinChance, cooldownLeft, fmtCountdown, fmtCooldown } from './play';
+import { MODES, modeById, simulateMatch, averageWinChance, winChance, cooldownLeft, fmtCountdown, fmtCooldown } from './play';
+import { LiveMatch, buildOpponentRoster } from './live';
+import { startLive } from './live-ui';
 import type { ModeDef } from './play';
 
 const players = playersData as unknown as Player[];
@@ -37,6 +39,7 @@ const coinsEl = $('#coins');
 const coinsDialog = $<HTMLDialogElement>('#coins-dialog');
 const teamDialog = $<HTMLDialogElement>('#team-dialog');
 const matchDialog = $<HTMLDialogElement>('#match-dialog');
+const liveDialog = $<HTMLDialogElement>('#live-dialog');
 
 const isOwned = (id: string) => save.owned.includes(id);
 
@@ -620,7 +623,6 @@ setInterval(() => {
 
 /* ---------- match ---------- */
 let matching = false;
-const MATCH_DURATION = 2600;
 
 function versusHTML(opp: MatchRecord['opponent']): string {
   return `
@@ -660,17 +662,24 @@ function playMatch(id: ModeId) {
   persist(save);
   renderCoins();
 
+  // match en direct : ton équipe à gauche, l'adversaire à droite, la carte au centre
+  const team = teamPlayers();
+  const mine = SLOTS.filter((sl) => sl.role).map((sl) => team[sl.id]!);
+  const live = new LiveMatch(mine, buildOpponentRoster(players, mine, out.opponent.ovr), [out.myScore, out.oppScore]);
   matching = true;
-  matchDialog.innerHTML = `
-    <h2 class="pack-title">${esc(mode.name)}</h2>
-    ${versusHTML(out.opponent)}
-    <div class="match-progress"><div style="animation-duration:${MATCH_DURATION}ms"></div></div>
-    <p class="muted center">Match en cours…</p>`;
-  if (!matchDialog.open) matchDialog.showModal();
-  setTimeout(() => {
-    matching = false;
-    showMatchResult(mode, record);
-  }, MATCH_DURATION);
+  startLive({
+    dialog: liveDialog,
+    match: live,
+    myName: save.teamInfo.name,
+    oppName: out.opponent.name,
+    rating: chem.teamOvr,
+    winPct: Math.round(winChance(chem.teamOvr, out.opponent.ovr) * 100),
+    cardHTML: (p) => cardHTML(p, null),
+    onFinish: () => {
+      matching = false;
+      showMatchResult(mode, record);
+    },
+  });
 }
 
 function showMatchResult(mode: ModeDef, m: MatchRecord) {
@@ -693,6 +702,7 @@ function showMatchResult(mode: ModeDef, m: MatchRecord) {
       <button class="btn btn-ghost" data-close>Fermer</button>
       <button class="btn btn-gold" data-replay="${mode.id}" ${state.disabled ? 'disabled' : ''}>${state.disabled ? esc(state.statusText) : 'Rejouer'}</button>
     </div>`;
+  if (!matchDialog.open) matchDialog.showModal();
   render();
 }
 
