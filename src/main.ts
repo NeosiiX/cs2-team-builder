@@ -10,6 +10,7 @@ import type { PackDef } from './packs';
 import { MODES, modeById, simulateMatch, averageWinChance, winChance, cooldownLeft, fmtCountdown, fmtCooldown } from './play';
 import { LiveMatch, buildOpponentRoster } from './live';
 import { MAPS } from './maps';
+import { loadNav } from './nav';
 import { startLive } from './live-ui';
 import type { ModeDef } from './play';
 
@@ -666,11 +667,14 @@ function playMatch(id: ModeId) {
   // match en direct : ton équipe à gauche, l'adversaire à droite, la carte au centre
   const team = teamPlayers();
   const mine = SLOTS.filter((sl) => sl.role).map((sl) => team[sl.id]!);
-  const live = new LiveMatch(mine, buildOpponentRoster(players, mine, out.opponent.ovr), [out.myScore, out.oppScore], MAPS[Math.floor(Math.random() * MAPS.length)]);
+  const map = MAPS[Math.floor(Math.random() * MAPS.length)];
+  const oppRoster = buildOpponentRoster(players, mine, out.opponent.ovr);
   matching = true;
-  startLive({
+  // le maillage 3D de la carte est chargé à la demande (quelques centaines de Ko, mis en cache ensuite)
+  loadNav(map).then(
+    () => startLive({
     dialog: liveDialog,
-    match: live,
+    match: new LiveMatch(mine, oppRoster, [out.myScore, out.oppScore], map),
     myName: save.teamInfo.name,
     oppName: out.opponent.name,
     rating: chem.teamOvr,
@@ -680,7 +684,13 @@ function playMatch(id: ModeId) {
       matching = false;
       showMatchResult(mode, record);
     },
-  });
+  }),
+    () => {
+      // carte indisponible (hors ligne…) : le résultat est déjà enregistré, on l'affiche directement
+      matching = false;
+      showMatchResult(mode, record);
+    },
+  );
 }
 
 function showMatchResult(mode: ModeDef, m: MatchRecord) {

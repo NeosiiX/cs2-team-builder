@@ -81,50 +81,50 @@ export const UTILITY: Record<string, MapUtility> = {
   mirage: {
     execute: {
       A: [
-        s('Fumée CT', 690, 930, 0), s('Fumée Jungle', 700, 790, 0.25), s('Fumée Stairs', 765, 850, 0.5),
-        m('Molotov Firebox', 795, 880, 1.1), m('Molotov Default', 875, 915, 1.4),
-        f('Flash Palace', 900, 930, 2.0), f('Flash Ramp', 880, 800, 2.3),
+        s('Fumée CT', 431, 790, 0), s('Fumée Jungle', 420, 640, 0.25), s('Fumée Stairs', 493, 723, 0.5),
+        m('Molotov Firebox', 518, 748, 1.1), m('Molotov Default', 584, 777, 1.4),
+        f('Flash Palace', 605, 790, 2.0), f('Flash Ramp', 589, 682, 2.3),
       ],
       B: [
-        s('Fumée Kitchen', 430, 440, 0), s('Fumée Short', 600, 400, 0.3),
-        m('Molotov Bench', 335, 320, 1.0), m('Molotov Van', 480, 380, 1.3),
-        f('Flash Apps', 525, 265, 2.0), f('Flash site B', 450, 320, 2.3),
+        s('Fumée Kitchen', 216, 383, 0), s('Fumée Short', 405, 380, 0.3),
+        m('Molotov Bench', 137, 284, 1.0), m('Molotov Van', 257, 334, 1.3),
+        f('Flash Apps', 294, 238, 2.0), f('Flash site B', 232, 284, 2.3),
       ],
     },
     ctDelay: [
-      { zone: { x: 1080, y: 760 }, r: 130, nades: [m('Incendiaire Ramp', 930, 780, 0), f('Flash Ramp', 1000, 760, 0.4)] },
-      { zone: { x: 1120, y: 920 }, r: 110, nades: [m('Incendiaire Palace', 990, 930, 0)] },
-      { zone: { x: 760, y: 230 }, r: 140, nades: [m('Incendiaire Apps', 560, 255, 0), f('Flash Apps', 640, 230, 0.4)] },
+      { zone: { x: 754, y: 649 }, r: 108, nades: [m('Incendiaire Ramp', 630, 665, 0), f('Flash Ramp', 688, 649, 0.4)] },
+      { zone: { x: 787, y: 781 }, r: 91, nades: [m('Incendiaire Palace', 680, 790, 0)] },
+      { zone: { x: 489, y: 209 }, r: 116, nades: [m('Incendiaire Apps', 323, 230, 0), f('Flash Apps', 390, 209, 0.4)] },
     ],
     retake: {
-      A: [f('Flash retake A', 838, 905, 0), s('Fumée Palace', 970, 935, 0.3)],
-      B: [f('Flash retake B', 452, 320, 0), s('Fumée Apps', 560, 255, 0.3)],
+      A: [f('Flash retake A', 554, 769, 0), s('Fumée Palace', 663, 794, 0.3)],
+      B: [f('Flash retake B', 234, 284, 0), s('Fumée Apps', 323, 230, 0.3)],
     },
     early: [],
   },
   inferno: {
     execute: {
       A: [
-        s('Fumée CT', 1230, 700, 0), s('Fumée Library', 1270, 880, 0.25), s('Fumée Arch', 1110, 610, 0.5),
-        m('Molotov Pit', 1230, 990, 1.1), m('Molotov Site', 1150, 860, 1.4),
-        f('Flash Long', 1030, 760, 2.0), f('Flash Balcon', 1100, 930, 2.3),
+        s('Fumée CT', 904, 592, 0), s('Fumée Library', 940, 754, 0.25), s('Fumée Arch', 797, 512, 0.5),
+        m('Molotov Pit', 904, 852, 1.1), m('Molotov Site', 833, 736, 1.4),
+        f('Flash Long', 725, 646, 2.0), f('Flash Balcon', 788, 799, 2.3),
       ],
       B: [
-        s('Fumée CT', 930, 275, 0), s('Fumée Coffins', 705, 260, 0.3),
-        m('Molotov New box', 790, 330, 1.0), m('Molotov Dark', 830, 355, 1.3),
-        f('Flash Banana', 820, 420, 2.0), f('Flash site B', 780, 280, 2.3),
+        s('Fumée CT', 650, 225, 0), s('Fumée Coffins', 434, 198, 0.3),
+        m('Molotov New box', 510, 261, 1.0), m('Molotov Dark', 546, 283, 1.3),
+        f('Flash Banana', 580, 345, 2.0), f('Flash site B', 501, 216, 2.3),
       ],
     },
     ctDelay: [
-      { zone: { x: 760, y: 600 }, r: 160, nades: [m('Incendiaire Banana', 790, 520, 0), s('Fumée Banana', 820, 470, 0.3), f('Flash Banana', 820, 460, 0.6)] },
-      { zone: { x: 950, y: 950 }, r: 140, nades: [m('Incendiaire Balcon', 1050, 930, 0)] },
-      { zone: { x: 1010, y: 760 }, r: 110, nades: [f('Flash Long', 1020, 720, 0)] },
+      { zone: { x: 483, y: 503 }, r: 143, nades: [m('Incendiaire Banana', 510, 431, 0), s('Fumée Banana', 537, 386, 0.3), f('Flash Banana', 537, 377, 0.6)] },
+      { zone: { x: 653, y: 817 }, r: 126, nades: [m('Incendiaire Balcon', 743, 799, 0)] },
+      { zone: { x: 707, y: 646 }, r: 99, nades: [f('Flash Long', 716, 610, 0)] },
     ],
     retake: {
-      A: [f('Flash retake A', 1148, 820, 0), s('Fumée Pit', 1230, 980, 0.3)],
-      B: [f('Flash retake B', 778, 290, 0), s('Fumée Banana', 840, 420, 0.3)],
+      A: [f('Flash retake A', 831, 700, 0), s('Fumée Pit', 904, 844, 0.3)],
+      B: [f('Flash retake B', 499, 225, 0), s('Fumée Banana', 570, 360, 0.3)],
     },
-    early: [{ side: 'T', p: 0.45, ...m('Molotov Car', 880, 440, 9) }],
+    early: [{ side: 'T', p: 0.45, ...m('Molotov Car', 591, 359, 9) }],
   },
 };
 

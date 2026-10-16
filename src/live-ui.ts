@@ -1,5 +1,5 @@
 import type { LiveMatch, Unit, Side, LiveEvent, Vec } from './live';
-import { placeAt, levelAt } from './maps';
+import { placeAt } from './maps';
 import { FIRE_RADIUS } from './live';
 import type { Player } from './types';
 
@@ -232,7 +232,7 @@ export function startLive(opts: LiveUIOptions) {
       const row = rows.get(u.idx)!;
       const bomb = u.alive && u.idx === m.carrier;
       const place = placeAt(m.map, u.pos);
-      const lv = levelAt(m.map, u.pos);
+      const lv = m.levelOf(u);
       const placeTxt = u.alive && place.name ? `${place.name}${lv > 0 ? ' ▲' : lv < 0 ? ' ▼' : ''}` : '';
       const key = `${placeTxt}|${Math.ceil(u.hp)}|${u.kills}|${u.deaths}|${u.money}|${u.alive}|${bomb}`;
       if (row.dataset.k === key) continue;
@@ -436,7 +436,7 @@ export function startLive(opts: LiveUIOptions) {
       ctx.restore();
 
       // étage : ▲ en hauteur, ▼ en contrebas (comme le radar CS sur les cartes à étages)
-      const lvl = levelAt(m.map, u.pos);
+      const lvl = m.levelOf(u);
       if (lvl) {
         const bx = u.pos.x + R * 1.05;
         const by = u.pos.y - R * 1.05;

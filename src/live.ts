@@ -1,6 +1,9 @@
 import type { Player, Role } from './types';
 import type { MapDef, Vec } from './maps';
-import { findPath, randomIn, scatter, rectCenter, gridOf, levelAt } from './maps';
+import { rectCenter } from './maps';
+import type { Rect } from './maps';
+import { navOf } from './nav';
+import type { Nav, PathPt } from './nav';
 import { UTILITY, THROW_PRIORITY, NADE_TIME } from './utility';
 import type { NadeKind, NadeSpec } from './utility';
 import { pickPlan, T_LABEL, CT_LABEL } from './tactics';
@@ -120,7 +123,7 @@ export interface Unit {
   player: Player;
   name: string;
   pos: Vec;
-  path: Vec[];
+  path: PathPt[];
   speed: number;
   /** vitesse actuelle (accélère et freine) */
   v: number;
@@ -151,6 +154,11 @@ export interface Unit {
   lostSight: number;
   lastShot: number;
   replan: number;
+  /** zone du maillage de navigation où se trouve le joueur (donne sa hauteur z) */
+  area: number;
+  /** dernier recalcul de trajet forcé (anti-boucle) et nombre de blocages d'affilée */
+  replanAt: number;
+  stuck: number;
   /** grenades en poche (achetées selon l'économie et le rôle) */
   inv: Record<NadeKind, number>;
   /** fin du trajet des T après le point de regroupement */
@@ -184,6 +192,8 @@ export interface Projectile {
   team: 0 | 1;
   thrower: number;
   landed: boolean;
+  /** hauteur du sol à l'impact (le feu ne brûle qu'à cet étage) */
+  z: number;
 }
 export const SMOKE_RADIUS = 40;
 export const FIRE_RADIUS = 30;
@@ -222,6 +232,7 @@ export class LiveMatch {
   readonly opp: Player[];
   readonly finalScore: [number, number];
   readonly map: MapDef;
+  readonly nav: Nav;
   private rng: Rng;
   private schedule: (0 | 1)[];
   private target: 'A' | 'B' = 'A';
@@ -246,6 +257,7 @@ export class LiveMatch {
 
   constructor(mine: Player[], opp: Player[], finalScore: [number, number], map: MapDef, rng: Rng = Math.random) {
     this.map = map;
+    this.nav = navOf(map);
     this.mine = mine;
     this.opp = opp;
     this.finalScore = finalScore;
@@ -256,7 +268,7 @@ export class LiveMatch {
         idx: i, team: i < 5 ? 0 : 1, player, name: player.nickname, pos: { x: 0, y: 0 }, path: [], speed: RUN, v: 0,
         heading: 0, angle: 0, watch: 0, flash: 0, hold: null, wander: 0, delay: 0, hp: 100, alive: true, kills: 0, deaths: 0,
         money: 800, weapon: 'pistol', site: null, task: 'move', action: 0, target: -1, react: 0, cooldown: 0, lostSight: 0,
-        lastShot: -99, replan: 0, inv: { smoke: 0, flash: 0, molotov: 0 }, after: [], home: null, retreatAt: -1, lurker: false,
+        lastShot: -99, replan: 0, area: -1, replanAt: -99, stuck: 0, inv: { smoke: 0, flash: 0, molotov: 0 }, after: [], home: null, retreatAt: -1, lurker: false,
       });
     });
     this.startRound();
@@ -287,7 +299,34 @@ export class LiveMatch {
 
   private emit(e: LiveEvent) { this.events.push(e); }
   private chat(from: number, text: string) { this.emit({ type: 'chat', from, text }); }
-  private pathTo(from: Vec, to: Vec): Vec[] { return findPath(this.map, from, to); }
+  private areaOf(p: Vec, hint = -1): number {
+    const a = this.nav.locate(p, hint);
+    return a >= 0 ? a : this.nav.nearestArea(p);
+  }
+  /** Chemin vers `to` (ramené sur le maillage s'il tombe dans un mur). */
+  private pathTo(from: Vec, to: Vec, fromArea = -1): PathPt[] {
+    const dest = this.nav.snap(to);
+    // départ : la zone qui contient vraiment le point (sinon le point du maillage le plus proche, même étage)
+    let start = fromArea >= 0 ? this.nav.locate(from, fromArea) : this.nav.locate(from);
+    let origin = from;
+    const pre: PathPt[] = [];
+    if (start < 0) {
+      const sn = this.nav.snap(from, fromArea >= 0 ? this.nav.areas[fromArea].z : undefined);
+      start = sn.area;
+      origin = sn.p;
+      pre.push({ ...sn.p, anchor: true, area: sn.area });
+    }
+    return [...pre, ...this.nav.path(origin, start, dest.p, dest.area)];
+  }
+  private randomIn(r: Rect, margin = 0): Vec { return this.nav.randomIn(r, this.rng, margin).p; }
+  private scatter(p: Vec, radius: number): Vec { return this.nav.scatter(p, this.areaOf(p), radius, this.rng).p; }
+  /** Hauteur (unités du jeu) d'un joueur. */
+  zOf(u: Unit): number { return u.area >= 0 ? this.nav.areas[u.area].z : this.nav.zMedian; }
+  /** Étage affiché : ▲ nettement au-dessus du niveau moyen de la carte, ▼ nettement en dessous. */
+  levelOf(u: Unit): -1 | 0 | 1 {
+    const d = this.zOf(u) - this.nav.zMedian;
+    return d > 90 ? 1 : d < -90 ? -1 : 0;
+  }
   private runSpeed(): number { return RUN * (0.95 + this.rng() * 0.12); }
 
   /** Direction à surveiller depuis `p` : le début du chemin vers `from` (là d'où viendra l'ennemi). */
@@ -313,8 +352,8 @@ export class LiveMatch {
   }
 
   /** Vue dégagée : pas de mur, pas de caisse, pas de fumigène entre a et b. */
-  sees(a: Vec, b: Vec): boolean {
-    if (!gridOf(this.map).los(a, b)) return false;
+  sees(a: Vec, b: Vec, ai = -1, bi = -1): boolean {
+    if (!this.nav.visible(ai >= 0 ? ai : this.areaOf(a), bi >= 0 ? bi : this.areaOf(b))) return false;
     if (dist(a, b) < 45) return true; // à bout portant, la fumée ne cache rien
     for (const n of this.nades) {
       const r = this.smokeRadius(n) * 0.9;
@@ -347,15 +386,14 @@ export class LiveMatch {
   private throwNade(u: Unit, spec: NadeSpec) {
     if (!u.alive || u.inv[spec.kind] <= 0) return;
     u.inv[spec.kind] -= 1;
-    const g = gridOf(this.map);
-    const [c, r] = g.snap(spec.at);
-    const to = g.walk(spec.at) ? { ...spec.at } : g.center(c, r);
+    const snapped = this.nav.snap(spec.at, this.zOf(u));
+    const to = snapped.p;
     const flight = (spec.kind === 'flash' ? 0.8 : 1.1) * Math.min(1.5, Math.max(0.6, dist(u.pos, to) / 320));
     const land = this.t + flight;
     const life = spec.kind === 'smoke' ? NADE_TIME.smoke
       : spec.kind === 'flash' ? NADE_TIME.flashBurst
       : this.sideOf(u.team) === 'T' ? NADE_TIME.molotovT : NADE_TIME.molotovCT;
-    this.nades.push({ kind: spec.kind, name: spec.name, from: { ...u.pos }, to, thrown: this.t, land, until: land + life, team: u.team, thrower: u.idx, landed: false });
+    this.nades.push({ kind: spec.kind, name: spec.name, from: { ...u.pos }, to, thrown: this.t, land, until: land + life, team: u.team, thrower: u.idx, landed: false, z: this.nav.areas[snapped.area].z });
     if (u.target < 0) u.angle = Math.atan2(to.y - u.pos.y, to.x - u.pos.x);
   }
 
@@ -381,7 +419,7 @@ export class LiveMatch {
     for (const f of this.nades) {
       if (!this.burning(f)) continue;
       for (const u of this.units) {
-        if (!u.alive || dist(u.pos, f.to) > FIRE_RADIUS) continue;
+        if (!u.alive || dist(u.pos, f.to) > FIRE_RADIUS || Math.abs(this.zOf(u) - f.z) > 90) continue;
         if (u.team !== f.team) {
           u.hp -= FIRE_DPS * dt;
           if (this.isProtected(u)) u.hp = Math.max(1, u.hp);
@@ -401,7 +439,7 @@ export class LiveMatch {
     for (const u of this.units) {
       if (!u.alive || u.team === n.team) continue;
       const d = dist(u.pos, n.to);
-      if (d > 320 || !this.sees(u.pos, n.to)) continue;
+      if (d > 320 || !this.sees(u.pos, n.to, u.area, this.nav.locate(n.to, -1, n.z))) continue;
       const a = angleDiff(u.angle, Math.atan2(n.to.y - u.pos.y, n.to.x - u.pos.x));
       const facing = a < 1.0 ? 1 : a < 1.9 ? 0.5 : 0.12;
       u.flash = Math.max(u.flash, 2.8 * facing * (1 - d / 380));
@@ -415,8 +453,8 @@ export class LiveMatch {
     if (u.task === 'defuse') u.task = 'retake';
     const d = Math.max(1, dist(u.pos, c));
     const out = { x: c.x + ((u.pos.x - c.x) / d) * (FIRE_RADIUS + 20), y: c.y + ((u.pos.y - c.y) / d) * (FIRE_RADIUS + 20) };
-    const dest = gridOf(this.map).walk(out) ? out : scatter(this.map, out, 30, this.rng);
-    u.path = this.pathTo(u.pos, dest);
+    const dest = this.nav.locate(out, u.area) >= 0 ? out : this.scatter(out, 30);
+    u.path = this.pathTo(u.pos, dest, u.area);
     u.speed = this.runSpeed();
     if (u.hold && dist(u.hold, c) < FIRE_RADIUS + 6) u.hold = dest;
     u.delay = 0;
@@ -441,7 +479,8 @@ export class LiveMatch {
       if (u.lurker && this.plan.t === 'lurk') continue;
       if (u.task === 'pickup' || u.task === 'plant') continue;
       if (u.task === 'stage' || u.lurker) {
-        u.path = u.after.length ? u.after : this.pathTo(u.pos, randomIn(this.map, this.map.sites[site], this.rng, 6));
+        const dest = u.after.length ? u.after[u.after.length - 1] : this.randomIn(this.map.sites[site], 6);
+        u.path = this.pathTo(u.pos, dest, u.area);
         u.after = [];
         u.lurker = false;
       }
@@ -464,8 +503,8 @@ export class LiveMatch {
       if (u.site === s && u.task !== 'push') continue;
       // tout le monde ne tourne pas : un CT garde parfois son site
       if (u.site !== 'M' && u.task !== 'push' && this.rng() < 0.2) continue;
-      const hold = randomIn(this.map, this.map.sites[s], this.rng, 6);
-      u.path = this.pathTo(u.pos, hold);
+      const hold = this.randomIn(this.map.sites[s], 6);
+      u.path = this.pathTo(u.pos, hold, u.area);
       u.hold = hold;
       u.home = hold;
       u.site = s;
@@ -507,7 +546,8 @@ export class LiveMatch {
         cooldown: 0, lostSight: 0, lastShot: -99, flash: 0, v: 0, replan: 0, after: [], home: null, retreatAt: -1, lurker: false,
         wander: 1 + this.rng() * 2, delay: side === 'T' ? this.rng() * 3 : this.rng() * 0.8,
       });
-      u.pos = randomIn(this.map, side === 'T' ? this.map.tSpawn : this.map.ctSpawn, this.rng, 10);
+      u.pos = this.randomIn(side === 'T' ? this.map.tSpawn : this.map.ctSpawn, 10);
+      u.area = this.areaOf(u.pos);
       u.speed = this.runSpeed();
       if (pistol) u.money = 800;
       // achats : pistolet, AWP / fusil, SMG ou éco
@@ -562,12 +602,17 @@ export class LiveMatch {
   }
 
   /** Trajet d'un T : itinéraire k du site, jusqu'à `end`. */
-  private routePath(from: Vec, site: 'A' | 'B', k: number, end: Vec): Vec[] {
-    const pts: Vec[] = [];
+  private routePath(from: Vec, site: 'A' | 'B', k: number, end: Vec, fromArea = -1): PathPt[] {
+    const pts: PathPt[] = [];
     let p = from;
+    let area = fromArea;
     for (const wp of [...this.map.routes[site][k], end]) {
-      pts.push(...this.pathTo(p, wp));
-      p = wp;
+      const seg = this.pathTo(p, wp, area);
+      if (!seg.length) continue; // point d'itinéraire inaccessible : on passe au suivant
+      pts.push(...seg);
+      const last = seg[seg.length - 1];
+      p = { x: last.x, y: last.y };
+      area = last.area ?? this.areaOf(p);
     }
     return pts;
   }
@@ -594,20 +639,20 @@ export class LiveMatch {
 
     ts.forEach((u, i) => {
       const k = i < plan.groups[0] ? primary : 1 - primary;
-      const end = randomIn(this.map, this.map.sites[site], this.rng, 6);
+      const end = this.randomIn(this.map.sites[site], 6);
       u.site = site;
       u.lurker = false;
       u.watch = this.watchFrom(end, ctSpawn);
 
       if (plan.t === 'rush' || plan.t === 'contact') {
-        u.path = this.routePath(u.pos, site, k, end);
+        u.path = this.routePath(u.pos, site, k, end, u.area);
         u.hold = end;
         u.task = 'move';
         u.delay = this.rng() * (plan.t === 'rush' ? 0.6 : 2);
         u.speed = plan.t === 'rush' ? this.runSpeed() * 1.12 : RUN * 0.55; // contact : on avance en marchant
       } else if (plan.t === 'default') {
         const cp = controlPts[i % controlPts.length];
-        u.path = this.pathTo(u.pos, cp);
+        u.path = this.pathTo(u.pos, cp, u.area);
         u.after = [];
         u.hold = cp;
         u.task = 'stage';
@@ -615,8 +660,8 @@ export class LiveMatch {
       } else {
         const lurk = (plan.t === 'lurk' && i === ts.length - 1) || (plan.t === 'fake' && i >= ts.length - 2);
         const s2 = lurk ? other : site;
-        const end2 = lurk ? randomIn(this.map, this.map.sites[other], this.rng, 6) : end;
-        const pts = this.routePath(u.pos, s2, lurk ? Math.floor(this.rng() * 2) : k, end2);
+        const end2 = lurk ? this.randomIn(this.map.sites[other], 6) : end;
+        const pts = this.routePath(u.pos, s2, lurk ? Math.floor(this.rng() * 2) : k, end2, u.area);
         const [toStage, rest] = splitBefore(u.pos, pts, plan.stage + (lurk ? 60 : 0));
         const stage = toStage[toStage.length - 1] ?? u.pos;
         u.path = toStage;
@@ -646,14 +691,14 @@ export class LiveMatch {
       const s = spots[i];
       u.site = s;
       let hold: Vec;
-      if (s === 'M') hold = scatter(this.map, this.map.mid, 26, this.rng);
+      if (s === 'M') hold = this.scatter(this.map.mid, 26);
       else {
         const c = rectCenter(this.map.sites[s]);
         const r = this.rng();
         // poste sur le site, avancé (vers l'entrée T) ou reculé (vers le spawn CT)
-        if (plan.ct === 'deep' || r < 0.2) hold = scatter(this.map, this.alongPath(c, ctSpawn, 70 + this.rng() * 50), 14, this.rng);
-        else if (r < 0.45) hold = scatter(this.map, this.alongPath(c, tSpawn, 60 + this.rng() * 60), 14, this.rng);
-        else hold = randomIn(this.map, this.map.sites[s], this.rng, 6);
+        if (plan.ct === 'deep' || r < 0.2) hold = this.scatter(this.alongPath(c, ctSpawn, 70 + this.rng() * 50), 14);
+        else if (r < 0.45) hold = this.scatter(this.alongPath(c, tSpawn, 60 + this.rng() * 60), 14);
+        else hold = this.randomIn(this.map.sites[s], 6);
       }
       u.home = hold;
       u.retreatAt = -1;
@@ -662,14 +707,14 @@ export class LiveMatch {
         // push pour l'info : sur un itinéraire T, puis repli
         const routes = [...this.map.routes.A, ...this.map.routes.B];
         const r = routes[Math.floor(this.rng() * routes.length)];
-        const spot = scatter(this.map, r[Math.min(r.length - 1, 1 + Math.floor(this.rng() * 2))], 16, this.rng);
-        u.path = this.pathTo(u.pos, spot);
+        const spot = this.scatter(r[Math.min(r.length - 1, 1 + Math.floor(this.rng() * 2))], 16);
+        u.path = this.pathTo(u.pos, spot, u.area);
         u.hold = spot;
         u.task = 'push';
         u.retreatAt = 14 + this.rng() * 10;
         u.watch = this.watchFrom(spot, tSpawn);
       } else {
-        u.path = this.pathTo(u.pos, hold);
+        u.path = this.pathTo(u.pos, hold, u.area);
         u.hold = hold;
         u.watch = this.watchFrom(hold, tSpawn);
       }
@@ -763,8 +808,8 @@ export class LiveMatch {
       const l = this.alive('T').find((u) => u.lurker);
       if (l) {
         const other = this.target === 'A' ? 'B' : 'A';
-        const flank = scatter(this.map, this.alongPath(rectCenter(this.map.sites[other]), rectCenter(this.map.sites[this.target]), 180), 20, this.rng);
-        l.path = this.pathTo(l.pos, flank);
+        const flank = this.scatter(this.alongPath(rectCenter(this.map.sites[other]), rectCenter(this.map.sites[this.target]), 180), 20);
+        l.path = this.pathTo(l.pos, flank, l.area);
         l.hold = flank;
         l.task = 'move';
         l.speed = RUN * 0.6;
@@ -781,7 +826,7 @@ export class LiveMatch {
       if (u.retreatAt > 0 && this.t >= u.retreatAt && u.target < 0 && u.home) {
         u.retreatAt = -1;
         u.task = 'hold';
-        u.path = this.pathTo(u.pos, u.home);
+        u.path = this.pathTo(u.pos, u.home, u.area);
         u.hold = u.home;
         u.speed = this.runSpeed();
         u.watch = this.watchFrom(u.home, rectCenter(this.map.tSpawn));
@@ -823,12 +868,23 @@ export class LiveMatch {
       if (ts.length && !ts.some((u) => u.task === 'pickup')) {
         const u = ts.reduce((a, b) => (dist(a.pos, bp) < dist(b.pos, bp) ? a : b));
         u.task = 'pickup';
-        u.path = this.pathTo(u.pos, bp);
+        u.path = this.pathTo(u.pos, bp, u.area);
         u.hold = { ...bp };
         u.speed = this.runSpeed();
       }
     }
 
+    // porteur : après l'exécution, s'il n'est pas sur le site et ne bouge plus, il y va
+    if (this.bomb.state === 'carried' && this.execAt >= 0) {
+      const c = this.units[this.bomb.carrier];
+      if (c.alive && c.task !== 'plant' && !c.path.length && !this.onSite(c.pos)) {
+        const spot = { ...this.map.bomb[this.target] };
+        c.path = this.pathTo(c.pos, spot, c.area);
+        c.hold = spot;
+        c.task = 'move';
+        c.speed = this.runSpeed();
+      }
+    }
     // porteur : une fois sur le site et sans ennemi en vue, il pose
     if (this.bomb.state === 'carried') {
       const c = this.units[this.bomb.carrier];
@@ -866,13 +922,13 @@ export class LiveMatch {
         if (this.winSide === 'T' && foes.length && dist(u.pos, bp) < 140) {
           const f = foes.reduce((a, b) => (dist(a.pos, u.pos) < dist(b.pos, u.pos) ? a : b));
           u.task = 'hunt';
-          u.path = this.pathTo(u.pos, f.pos);
+          u.path = this.pathTo(u.pos, f.pos, u.area);
           u.hold = { ...f.pos };
           continue;
         }
         if (u.task !== 'retake' || !u.path.length) {
           u.task = 'retake';
-          u.path = this.pathTo(u.pos, bp);
+          u.path = this.pathTo(u.pos, bp, u.area);
           u.hold = { ...bp };
           u.speed = this.runSpeed();
         }
@@ -894,7 +950,7 @@ export class LiveMatch {
   private canDefuse(u: Unit): boolean {
     const ts = this.alive('T');
     if (this.winSide === 'T' && ts.length) return false;
-    return !ts.some((t) => dist(t.pos, u.pos) < 700 && this.sees(t.pos, u.pos));
+    return !ts.some((t) => dist(t.pos, u.pos) < 700 && this.sees(t.pos, u.pos, t.area, u.area));
   }
 
   /** Fin de manche sans pose alors que les T doivent gagner : tout le monde fonce sur le site. */
@@ -906,8 +962,8 @@ export class LiveMatch {
       if (u.task === 'pickup' || u.task === 'plant') continue;
       const end = this.bomb.state === 'carried' && u.idx === this.bomb.carrier
         ? { ...this.map.bomb[site] }
-        : randomIn(this.map, this.map.sites[site], this.rng, 6);
-      u.path = this.pathTo(u.pos, end);
+        : this.randomIn(this.map.sites[site], 6);
+      u.path = this.pathTo(u.pos, end, u.area);
       u.hold = end;
       u.task = 'move';
       u.speed = this.runSpeed() * 1.05;
@@ -924,7 +980,7 @@ export class LiveMatch {
         this.bomb.pos = null;
         u.task = 'move';
         const end = { ...this.map.bomb[this.target] };
-        u.path = this.pathTo(u.pos, end);
+        u.path = this.pathTo(u.pos, end, u.area);
         u.hold = end;
       }
       if (u.task === 'plant') {
@@ -954,8 +1010,8 @@ export class LiveMatch {
     const ctSpawn = rectCenter(this.map.ctSpawn);
     for (const t of this.alive('T')) {
       if (t !== u) {
-        const hold = scatter(this.map, this.bomb.pos!, 90, this.rng);
-        t.path = this.pathTo(t.pos, hold);
+        const hold = this.scatter(this.bomb.pos!, 90);
+        t.path = this.pathTo(t.pos, hold, t.area);
         t.hold = hold;
         t.task = 'hold';
       }
@@ -975,7 +1031,7 @@ export class LiveMatch {
       if (u.target >= 0) {
         const t = this.units[u.target];
         if (!t.alive) u.target = -1;
-        else if (dist(u.pos, t.pos) < WEAPON[u.weapon].range && this.sees(u.pos, t.pos)) u.lostSight = 0;
+        else if (dist(u.pos, t.pos) < WEAPON[u.weapon].range && this.sees(u.pos, t.pos, u.area, t.area)) u.lostSight = 0;
         else {
           u.lostSight += dt;
           if (u.lostSight > 0.7) u.target = -1;
@@ -990,7 +1046,7 @@ export class LiveMatch {
           const d = dist(u.pos, e.pos);
           if (d >= WEAPON[u.weapon].range || d >= bd) continue;
           if (d > HEAR && angleDiff(u.angle, Math.atan2(e.pos.y - u.pos.y, e.pos.x - u.pos.x)) > FOV) continue;
-          if (!this.sees(u.pos, e.pos)) continue;
+          if (!this.sees(u.pos, e.pos, u.area, e.area)) continue;
           best = e;
           bd = d;
         }
@@ -1030,9 +1086,9 @@ export class LiveMatch {
     if (this.isProtected(u)) p *= 1.7;
     if (this.rush && this.sideOf(u.team) === 'CT') p *= 0.55;
     // avantage de hauteur : tirer depuis l'étage sur le sol (ou d'en bas vers le haut)
-    const dh = levelAt(this.map, u.pos) - levelAt(this.map, tgt.pos);
-    if (dh > 0) p *= 1.12;
-    else if (dh < 0) p *= 0.9;
+    const dz = this.zOf(u) - this.zOf(tgt);
+    if (dz > 70) p *= 1.12;
+    else if (dz < -70) p *= 0.9;
     p = Math.min(0.92, Math.max(0.03, p));
     // la cible se retourne quand on lui tire dessus
     if (tgt.target < 0 && tgt.task !== 'plant' && tgt.task !== 'defuse') {
@@ -1072,7 +1128,6 @@ export class LiveMatch {
   private move(dt: number) {
     const TURN = 9; // rad/s : coins arrondis
     const ACCEL = 170;
-    const g = gridOf(this.map);
     for (const u of this.units) {
       if (!u.alive) continue;
       if (u.delay > 0) { u.delay -= dt; continue; }
@@ -1084,7 +1139,7 @@ export class LiveMatch {
         u.wander -= dt;
         if (u.wander <= 0) {
           u.wander = 2.5 + this.rng() * 3.5;
-          u.path = [scatter(this.map, u.hold, 12, this.rng)];
+          u.path = this.pathTo(u.pos, this.scatter(u.hold, 12), u.area);
           u.speed = RUN * 0.35;
         }
       }
@@ -1097,13 +1152,17 @@ export class LiveMatch {
         u.heading = turnToward(u.heading, Math.atan2(to.y - u.pos.y, to.x - u.pos.x), TURN * dt);
         const step = u.v * dt;
         const d = dist(u.pos, to);
-        if (u.path.length > 1 && d <= Math.max(step, 10)) u.path.shift();
+        if (u.path.length > 1 && d <= Math.max(step, to.anchor || u.path[1]?.jump ? 0.5 : 10)) {
+          if (to.anchor) { u.pos = { x: to.x, y: to.y }; if (to.area !== undefined) u.area = to.area; }
+          u.path.shift();
+        }
         else if (u.path.length === 1 && d <= Math.max(step, 3)) {
           u.pos = { ...to };
+          u.area = this.areaOf(u.pos, u.area);
           u.path.shift();
           if (u.task === 'move') u.task = 'hold';
-        } else this.advance(u, step, g);
-      } else if (u.v > 0.5) this.advance(u, u.v * dt, g);
+        } else this.advance(u, step);
+      }
 
       // regard : la cible (géré par le combat) > la marche > la direction surveillée
       if (u.target < 0) {
@@ -1120,26 +1179,44 @@ export class LiveMatch {
         const b = this.units[j];
         if (!b.alive || b.team !== a.team) continue;
         const d = dist(a.pos, b.pos);
-        if (d >= 20 || d < 0.01) continue;
+        if (d >= 20 || d < 0.01 || Math.abs(this.zOf(a) - this.zOf(b)) > 90) continue;
         const push = ((20 - d) / 2) * Math.min(1, dt * 8);
         const nx = (a.pos.x - b.pos.x) / d;
         const ny = (a.pos.y - b.pos.y) / d;
         const pa = { x: a.pos.x + nx * push, y: a.pos.y + ny * push };
         const pb = { x: b.pos.x - nx * push, y: b.pos.y - ny * push };
-        if (g.walk(pa) && a.task !== 'plant' && a.task !== 'defuse') a.pos = pa;
-        if (g.walk(pb) && b.task !== 'plant' && b.task !== 'defuse') b.pos = pb;
+        const za = this.nav.locate(pa, a.area);
+        const zb = this.nav.locate(pb, b.area);
+        if (za >= 0 && a.task !== 'plant' && a.task !== 'defuse') { a.pos = pa; a.area = za; }
+        if (zb >= 0 && b.task !== 'plant' && b.task !== 'defuse') { b.pos = pb; b.area = zb; }
       }
     }
   }
 
   /** Avance dans la direction de marche sans traverser un mur (glisse le long sinon). */
-  private advance(u: Unit, step: number, g: ReturnType<typeof gridOf>) {
-    const nx = u.pos.x + Math.cos(u.heading) * step;
-    const ny = u.pos.y + Math.sin(u.heading) * step;
-    if (g.walk({ x: nx, y: ny })) u.pos = { x: nx, y: ny };
-    else if (g.walk({ x: nx, y: u.pos.y })) u.pos = { x: nx, y: u.pos.y };
-    else if (g.walk({ x: u.pos.x, y: ny })) u.pos = { x: u.pos.x, y: ny };
-    else if (u.path.length) u.pos = { ...u.path[0] }; // coincé : on se recolle au chemin
+  /**
+   * Avance le long du trajet. Les trajets sont validés à leur calcul (liaisons du maillage, lignes droites vérifiées,
+   * jamais d'un étage à l'autre) : on les suit fidèlement, en arrondissant à peine les virages. La zone du joueur
+   * (donc sa hauteur) suit sa position, sans jamais sauter vers un étage non relié.
+   */
+  private advance(u: Unit, step: number) {
+    const to = u.path[0];
+    if (!to) { u.v = 0; return; }
+    const d = dist(u.pos, to);
+    const want = Math.atan2(to.y - u.pos.y, to.x - u.pos.x);
+    let q: Vec;
+    if (to.jump || to.anchor || angleDiff(u.heading, want) > 0.5 || d < 6) {
+      // point exact, virage serré ou arrivée : tout droit vers le point
+      const k = Math.min(1, step / Math.max(d, 1e-6));
+      q = { x: u.pos.x + (to.x - u.pos.x) * k, y: u.pos.y + (to.y - u.pos.y) * k };
+      u.heading = want;
+    } else {
+      q = { x: u.pos.x + Math.cos(u.heading) * step, y: u.pos.y + Math.sin(u.heading) * step };
+    }
+    u.pos = q;
+    const a = this.nav.locate(q, u.area);
+    if (a >= 0 && (a === u.area || this.nav.canPass(u.area, a, q))) u.area = a;
+    if (to.jump && dist(u.pos, to) < 0.01 && to.area !== undefined) u.area = to.area;
   }
 
   /* ---------- fin de manche ---------- */
