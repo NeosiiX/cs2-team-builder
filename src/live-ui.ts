@@ -1,4 +1,5 @@
 import type { LiveMatch, Unit, Side, LiveEvent, Vec } from './live';
+import { FIRE_RADIUS } from './live';
 import type { Player } from './types';
 
 /**
@@ -117,6 +118,8 @@ export function startLive(opts: LiveUIOptions) {
   const fireUntil = new Map<number, number>();
   const shotSeen = new Map<number, number>();
   const bullets: Shot[] = [];
+  const bursts: { at: Vec; born: number }[] = [];
+  const labels: { text: string; at: Vec; born: number; color: string }[] = [];
   let activeIdx = -1;
   const feed: Line[] = [];
   const chat: Line[] = [];
@@ -163,7 +166,13 @@ export function startLive(opts: LiveUIOptions) {
         shots.push({ from: e.from, to: e.to, born: now });
         const k = m.units[e.killer];
         const v = m.units[e.victim];
-        feed.push({ html: `${nameHTML(k)} <i>${e.hs ? '⌖' : '▸'}</i> ${nameHTML(v)}`, born: now });
+        feed.push({ html: `${nameHTML(k)} <i>${e.tool ? '🔥' : e.hs ? '⌖' : '▸'}</i> ${nameHTML(v)}`, born: now });
+        break;
+      }
+      case 'nade': {
+        if (e.kind === 'flash') bursts.push({ at: e.at, born: now });
+        const side = m.sideOf(e.team);
+        labels.push({ text: e.name, at: e.at, born: now, color: side === 'CT' ? 'rgba(150,200,255,A)' : 'rgba(255,214,120,A)' });
         break;
       }
       case 'plant': notice(`Bombe plantée sur le site ${e.site}`); break;
@@ -220,12 +229,12 @@ export function startLive(opts: LiveUIOptions) {
     for (const u of m.units) {
       const row = rows.get(u.idx)!;
       const bomb = u.alive && u.idx === m.carrier;
-      const key = `${u.hp}|${u.kills}|${u.deaths}|${u.money}|${u.alive}|${bomb}`;
+      const key = `${Math.ceil(u.hp)}|${u.kills}|${u.deaths}|${u.money}|${u.alive}|${bomb}`;
       if (row.dataset.k === key) continue;
       row.dataset.k = key;
       row.classList.toggle('dead', !u.alive);
       row.querySelector('.lp-kd')!.textContent = `${u.kills}/${u.deaths}`;
-      row.querySelector('.lp-hpn')!.textContent = `+ ${u.hp}`;
+      row.querySelector('.lp-hpn')!.textContent = `+ ${Math.ceil(u.hp)}`;
       const bar = row.querySelector<HTMLElement>('.lp-bar div')!;
       bar.style.width = `${u.hp}%`;
       bar.classList.toggle('low', u.hp <= 35);
@@ -265,36 +274,61 @@ export function startLive(opts: LiveUIOptions) {
       ctx.strokeStyle = '#0b0b0b'; ctx.lineWidth = 1.5 * U; ctx.strokeRect(b.x - 6 * U, b.y - 4 * U, 12 * U, 8 * U);
     }
 
-    // fumigènes : grenade en vol puis nuage gris
-    for (const sm of m.smokes) {
-      if (m.t < sm.land) {
-        const k = Math.max(0, (m.t - sm.thrown) / (sm.land - sm.thrown));
-        const x = sm.from.x + (sm.to.x - sm.from.x) * k;
-        const y = sm.from.y + (sm.to.y - sm.from.y) * k - Math.sin(k * Math.PI) * 26 * U;
-        ctx.fillStyle = '#d9dee6';
+    // grenades : en vol, feu (molotov), nuage (fumigène)
+    const NADE_COL: Record<string, string> = { smoke: '#d9dee6', flash: '#fff6c8', molotov: '#ff8a2a' };
+    for (const n of m.nades) {
+      if (m.t < n.land) {
+        const k = Math.max(0, (m.t - n.thrown) / (n.land - n.thrown));
+        const x = n.from.x + (n.to.x - n.from.x) * k;
+        const y = n.from.y + (n.to.y - n.from.y) * k - Math.sin(k * Math.PI) * 26 * U;
+        ctx.fillStyle = NADE_COL[n.kind];
         ctx.beginPath(); ctx.arc(x, y, 2.6 * U, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1 * U; ctx.stroke();
         continue;
       }
-      const r = m.smokeRadius(sm);
+      if (n.kind === 'molotov' && m.burning(n)) {
+        const life = Math.min(1, (n.until - m.t) / 1.2);
+        const seed = n.to.x * 3 + n.to.y * 5;
+        for (let i = 0; i < 9; i++) {
+          const a = seed + i * 2.399;
+          const rr = i ? FIRE_RADIUS * (0.25 + ((i * 37) % 10) / 14) : 0;
+          const x = n.to.x + Math.cos(a) * rr;
+          const y = n.to.y + Math.sin(a) * rr;
+          const flick = 0.75 + 0.25 * Math.sin(now / 70 + i * 1.3);
+          const r = (9 + (i % 3) * 3) * U * 0.6 * flick;
+          const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+          g.addColorStop(0, `rgba(255,220,120,${0.85 * life})`);
+          g.addColorStop(0.5, `rgba(255,120,30,${0.7 * life})`);
+          g.addColorStop(1, 'rgba(200,40,10,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.strokeStyle = `rgba(255,120,40,${0.45 * life})`;
+        ctx.lineWidth = 1.2 * U;
+        ctx.setLineDash([4 * U, 3 * U]);
+        ctx.beginPath(); ctx.arc(n.to.x, n.to.y, FIRE_RADIUS, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]);
+        continue;
+      }
+      const r = m.smokeRadius(n);
       if (r <= 0) continue;
-      const fade = Math.min(1, (sm.until - m.t) / 2);
-      const seed = sm.to.x * 7 + sm.to.y * 13;
+      const fade = Math.min(1, (n.until - m.t) / 2);
+      const seed = n.to.x * 7 + n.to.y * 13;
       for (let i = 0; i < 6; i++) {
         const a = seed + i * 1.7 + m.t * 0.05;
         const ox = i ? Math.cos(a) * r * 0.32 : 0;
         const oy = i ? Math.sin(a) * r * 0.32 : 0;
         const rr = r * (i ? 0.62 : 1);
-        const g = ctx.createRadialGradient(sm.to.x + ox, sm.to.y + oy, rr * 0.15, sm.to.x + ox, sm.to.y + oy, rr);
+        const g = ctx.createRadialGradient(n.to.x + ox, n.to.y + oy, rr * 0.15, n.to.x + ox, n.to.y + oy, rr);
         g.addColorStop(0, `rgba(205,210,218,${0.55 * fade})`);
         g.addColorStop(0.7, `rgba(180,186,196,${0.42 * fade})`);
         g.addColorStop(1, 'rgba(170,176,186,0)');
         ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(sm.to.x + ox, sm.to.y + oy, rr, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(n.to.x + ox, n.to.y + oy, rr, 0, Math.PI * 2); ctx.fill();
       }
       ctx.strokeStyle = `rgba(225,230,238,${0.35 * fade})`;
       ctx.lineWidth = 1.2 * U;
-      ctx.beginPath(); ctx.arc(sm.to.x, sm.to.y, r * 0.92, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(n.to.x, n.to.y, r * 0.92, 0, Math.PI * 2); ctx.stroke();
     }
 
     // états visuels : dégâts reçus, tirs, aveuglement
@@ -430,6 +464,35 @@ export function startLive(opts: LiveUIOptions) {
       ctx.moveTo(b.from.x + dx * tail, b.from.y + dy * tail);
       ctx.lineTo(b.from.x + dx * head, b.from.y + dy * head);
       ctx.stroke();
+    }
+    // flashs qui éclatent (durée réelle, pour rester visibles même en accéléré)
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      const age = now - bursts[i].born;
+      if (age > 420) { bursts.splice(i, 1); continue; }
+      const k = age / 420;
+      const b = bursts[i].at;
+      const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, (18 + 70 * k) * U);
+      g.addColorStop(0, `rgba(255,255,255,${0.95 * (1 - k)})`);
+      g.addColorStop(0.4, `rgba(255,250,215,${0.55 * (1 - k)})`);
+      g.addColorStop(1, 'rgba(255,250,215,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(b.x, b.y, (18 + 70 * k) * U, 0, Math.PI * 2); ctx.fill();
+    }
+    // nom des lancers (ex. « Fumée Jungle »)
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = `700 ${10.5 * U}px Barlow, "Segoe UI", sans-serif`;
+    for (let i = labels.length - 1; i >= 0; i--) {
+      const age = now - labels[i].born;
+      if (age > 1900) { labels.splice(i, 1); continue; }
+      const l = labels[i];
+      const a = age < 1400 ? 1 : 1 - (age - 1400) / 500;
+      const y = l.at.y - 30 * U - age / 120;
+      ctx.lineWidth = 3 * U;
+      ctx.strokeStyle = `rgba(0,0,0,${0.8 * a})`;
+      ctx.strokeText(l.text, l.at.x, y);
+      ctx.fillStyle = l.color.replace('A', String(a));
+      ctx.fillText(l.text, l.at.x, y);
     }
     // impacts mortels
     for (let i = shots.length - 1; i >= 0; i--) {

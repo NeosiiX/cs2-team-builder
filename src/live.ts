@@ -1,6 +1,8 @@
 import type { Player, Role } from './types';
 import type { MapDef, Vec } from './maps';
 import { findPath, randomIn, scatter, rectCenter, gridOf } from './maps';
+import { UTILITY, THROW_PRIORITY, NADE_TIME } from './utility';
+import type { NadeKind, NadeSpec } from './utility';
 
 /**
  * Moteur du match en direct (sans DOM).
@@ -41,6 +43,28 @@ function shuffle<T>(a: T[], rng: Rng): T[] {
 function rep<T>(v: T, n: number): T[] {
   return Array.from({ length: n }, () => v);
 }
+/** Coupe un trajet à `d` px avant son arrivée : [jusqu'au point de coupe, reste du trajet]. */
+function splitBefore(start: Vec, pts: Vec[], d: number): [Vec[], Vec[]] {
+  const segs: number[] = [];
+  let p = start;
+  for (const q of pts) { segs.push(dist(p, q)); p = q; }
+  const total = segs.reduce((a, b) => a + b, 0);
+  let left = Math.max(0, total - d);
+  if (left <= 0) return [[], pts];
+  p = start;
+  for (let i = 0; i < pts.length; i++) {
+    const q = pts[i];
+    if (segs[i] >= left) {
+      const k = segs[i] ? left / segs[i] : 0;
+      const cut = { x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k };
+      return [[...pts.slice(0, i), cut], pts.slice(i)];
+    }
+    left -= segs[i];
+    p = q;
+  }
+  return [pts, []];
+}
+
 function weighted(w: number[], rng: Rng): number {
   const t = w.reduce((s, x) => s + x, 0);
   let x = rng() * t;
@@ -86,7 +110,7 @@ const WEAPON: Record<Weapon, { interval: number; acc: number; range: number; bod
 };
 
 /* ---------- le match ---------- */
-type Task = 'move' | 'hold' | 'plant' | 'defuse' | 'pickup' | 'retake' | 'hunt';
+type Task = 'move' | 'stage' | 'hold' | 'plant' | 'defuse' | 'pickup' | 'retake' | 'hunt';
 
 export interface Unit {
   idx: number;
@@ -125,33 +149,40 @@ export interface Unit {
   lostSight: number;
   lastShot: number;
   replan: number;
-  /** fumigène encore en poche */
-  smoke: boolean;
+  /** grenades en poche (achetées selon l'économie et le rôle) */
+  inv: Record<NadeKind, number>;
+  /** fin du trajet des T après le point de regroupement */
+  after: Vec[];
 }
 
 export type EndReason = 'elim' | 'bomb' | 'defuse' | 'time';
 export type LiveEvent =
   | { type: 'roundStart'; round: number; half?: boolean }
-  | { type: 'kill'; killer: number; victim: number; from: Vec; to: Vec; hs: boolean }
+  | { type: 'kill'; killer: number; victim: number; from: Vec; to: Vec; hs: boolean; tool?: 'molotov' }
+  | { type: 'nade'; kind: NadeKind; name: string; at: Vec; team: 0 | 1 }
   | { type: 'plant'; site: 'A' | 'B' }
   | { type: 'defuse' }
   | { type: 'roundEnd'; round: number; winTeam: 0 | 1; reason: EndReason }
   | { type: 'chat'; from: number; text: string }
   | { type: 'matchEnd' };
 
-/** Fumigène : lancé de `from` à `to`, atterrit à `land`, se dissipe à `until` (temps de manche). */
-export interface Smoke {
+/** Grenade : lancée de `from` vers `to`, atterrit à `land`, effet jusqu'à `until` (temps de manche). */
+export interface Projectile {
+  kind: NadeKind;
+  name: string;
   from: Vec;
   to: Vec;
   thrown: number;
   land: number;
   until: number;
   team: 0 | 1;
+  thrower: number;
+  landed: boolean;
 }
 export const SMOKE_RADIUS = 40;
-const SMOKE_FLIGHT = 1.1;
+export const FIRE_RADIUS = 30;
 const SMOKE_BLOOM = 0.9;
-const SMOKE_TIME = 18;
+const FIRE_DPS = 40;
 
 export interface BombState {
   state: 'carried' | 'dropped' | 'planted' | 'defused' | 'exploded';
@@ -179,7 +210,7 @@ export class LiveMatch {
   freezeLeft = FREEZE;
   events: LiveEvent[] = [];
   bomb: BombState = { state: 'carried', pos: null, carrier: -1, site: null, timer: 0 };
-  smokes: Smoke[] = [];
+  nades: Projectile[] = [];
 
   readonly mine: Player[];
   readonly opp: Player[];
@@ -192,8 +223,12 @@ export class LiveMatch {
   private rush = false;
   private lossStreak: [number, number] = [0, 0];
   private aiClock = 0;
-  private execSmokes: Vec[] = [];
-  private ctSmokeAt = -99;
+  /** début de l'exécution T (-1 = pas encore) et lancers programmés */
+  private execAt = -1;
+  private pending: { u: number; spec: NadeSpec; at: number }[] = [];
+  private delaysUsed = new Set<number>();
+  private retakeDone = false;
+  private postMolly = false;
 
   constructor(mine: Player[], opp: Player[], finalScore: [number, number], map: MapDef, rng: Rng = Math.random) {
     this.map = map;
@@ -207,7 +242,7 @@ export class LiveMatch {
         idx: i, team: i < 5 ? 0 : 1, player, name: player.nickname, pos: { x: 0, y: 0 }, path: [], speed: RUN, v: 0,
         heading: 0, angle: 0, watch: 0, flash: 0, hold: null, wander: 0, delay: 0, hp: 100, alive: true, kills: 0, deaths: 0,
         money: 800, weapon: 'pistol', site: null, task: 'move', action: 0, target: -1, react: 0, cooldown: 0, lostSight: 0,
-        lastShot: -99, replan: 0, smoke: true,
+        lastShot: -99, replan: 0, inv: { smoke: 0, flash: 0, molotov: 0 }, after: [],
       });
     });
     this.startRound();
@@ -248,50 +283,165 @@ export class LiveMatch {
     return Math.atan2(q.y - p.y, q.x - p.x);
   }
 
-  /** Point situé à `d` px le long du chemin de `a` vers `b`. */
-  private alongPath(a: Vec, b: Vec, d: number): Vec {
-    let p = a;
-    let left = d;
-    for (const q of this.pathTo(a, b)) {
-      const l = dist(p, q);
-      if (l >= left) return { x: p.x + ((q.x - p.x) / l) * left, y: p.y + ((q.y - p.y) / l) * left };
-      left -= l;
-      p = q;
-    }
-    return p;
-  }
-
   /** Rayon actuel d'un fumigène (0 en vol, grossit à l'atterrissage, se dissipe à la fin). */
-  smokeRadius(s: Smoke, t = this.t): number {
-    if (t < s.land || t > s.until) return 0;
-    const grow = Math.min(1, (t - s.land) / SMOKE_BLOOM);
-    const fade = Math.min(1, (s.until - t) / 2);
+  smokeRadius(n: Projectile, t = this.t): number {
+    if (n.kind !== 'smoke' || t < n.land || t > n.until) return 0;
+    const grow = Math.min(1, (t - n.land) / SMOKE_BLOOM);
+    const fade = Math.min(1, (n.until - t) / 2);
     return SMOKE_RADIUS * (0.35 + 0.65 * grow) * (0.6 + 0.4 * fade);
+  }
+  /** Molotov en train de brûler ? */
+  burning(n: Projectile, t = this.t): boolean {
+    return n.kind === 'molotov' && n.landed && t < n.until;
+  }
+  private inFire(p: Vec): boolean {
+    return this.nades.some((n) => this.burning(n) && dist(n.to, p) < FIRE_RADIUS + 4);
   }
 
   /** Vue dégagée : pas de mur, pas de caisse, pas de fumigène entre a et b. */
   sees(a: Vec, b: Vec): boolean {
     if (!gridOf(this.map).los(a, b)) return false;
     if (dist(a, b) < 45) return true; // à bout portant, la fumée ne cache rien
-    for (const s of this.smokes) {
-      const r = this.smokeRadius(s) * 0.9;
+    for (const n of this.nades) {
+      const r = this.smokeRadius(n) * 0.9;
       if (r <= 0) continue;
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const l2 = dx * dx + dy * dy || 1;
-      const k = Math.max(0, Math.min(1, ((s.to.x - a.x) * dx + (s.to.y - a.y) * dy) / l2));
-      if (Math.hypot(a.x + dx * k - s.to.x, a.y + dy * k - s.to.y) < r) return false;
+      const k = Math.max(0, Math.min(1, ((n.to.x - a.x) * dx + (n.to.y - a.y) * dy) / l2));
+      if (Math.hypot(a.x + dx * k - n.to.x, a.y + dy * k - n.to.y) < r) return false;
     }
     return true;
   }
 
-  private throwSmoke(u: Unit, to: Vec) {
-    if (!u.smoke) return;
-    u.smoke = false;
-    const target = scatter(this.map, to, 10, this.rng);
-    const flight = SMOKE_FLIGHT * Math.min(1.4, Math.max(0.6, dist(u.pos, target) / 300));
-    this.smokes.push({ from: { ...u.pos }, to: target, thrown: this.t, land: this.t + flight, until: this.t + flight + SMOKE_TIME, team: u.team });
-    u.angle = Math.atan2(target.y - u.pos.y, target.x - u.pos.x);
+  /* ---------- module de stuff ---------- */
+  /** Répartit une séquence du module entre les joueurs d'un camp, selon leur rôle et ce qu'ils ont en poche. */
+  private planNades(side: Side, specs: NadeSpec[], t0: number) {
+    const perPlayer = new Map<number, number>();
+    for (const spec of specs) {
+      const pri = THROW_PRIORITY[spec.kind];
+      const left = (u: Unit) => u.inv[spec.kind] - this.pending.filter((p) => p.u === u.idx && p.spec.kind === spec.kind).length;
+      const cand = this.alive(side)
+        .filter((u) => left(u) > 0 && (perPlayer.get(u.idx) ?? 0) < 2 && u.task !== 'plant' && u.task !== 'defuse')
+        .sort((a, b) => pri.indexOf(a.player.role) - pri.indexOf(b.player.role) || dist(a.pos, spec.at) - dist(b.pos, spec.at))[0];
+      if (!cand) continue;
+      perPlayer.set(cand.idx, (perPlayer.get(cand.idx) ?? 0) + 1);
+      this.pending.push({ u: cand.idx, spec, at: t0 + spec.delay });
+    }
+  }
+
+  private throwNade(u: Unit, spec: NadeSpec) {
+    if (!u.alive || u.inv[spec.kind] <= 0) return;
+    u.inv[spec.kind] -= 1;
+    const g = gridOf(this.map);
+    const [c, r] = g.snap(spec.at);
+    const to = g.walk(spec.at) ? { ...spec.at } : g.center(c, r);
+    const flight = (spec.kind === 'flash' ? 0.8 : 1.1) * Math.min(1.5, Math.max(0.6, dist(u.pos, to) / 320));
+    const land = this.t + flight;
+    const life = spec.kind === 'smoke' ? NADE_TIME.smoke
+      : spec.kind === 'flash' ? NADE_TIME.flashBurst
+      : this.sideOf(u.team) === 'T' ? NADE_TIME.molotovT : NADE_TIME.molotovCT;
+    this.nades.push({ kind: spec.kind, name: spec.name, from: { ...u.pos }, to, thrown: this.t, land, until: land + life, team: u.team, thrower: u.idx, landed: false });
+    if (u.target < 0) u.angle = Math.atan2(to.y - u.pos.y, to.x - u.pos.x);
+  }
+
+  /** Lancers programmés, atterrissages (flash, extinction du feu par la fumée) et dégâts du feu. */
+  private updateNades(dt: number) {
+    for (let i = this.pending.length - 1; i >= 0; i--) {
+      const p = this.pending[i];
+      if (this.t < p.at) continue;
+      this.pending.splice(i, 1);
+      const u = this.units[p.u];
+      if (u.alive && u.task !== 'plant' && u.task !== 'defuse') this.throwNade(u, p.spec);
+    }
+    for (const n of this.nades) {
+      if (n.landed || this.t < n.land) continue;
+      n.landed = true;
+      this.emit({ type: 'nade', kind: n.kind, name: n.name, at: { ...n.to }, team: n.team });
+      if (n.kind === 'flash') this.detonateFlash(n);
+      if (n.kind === 'smoke') {
+        for (const f of this.nades) if (this.burning(f) && dist(f.to, n.to) < SMOKE_RADIUS + FIRE_RADIUS * 0.5) f.until = this.t;
+      }
+      if (n.kind === 'molotov' && this.nades.some((x) => this.smokeRadius(x) > 0 && dist(x.to, n.to) < SMOKE_RADIUS)) n.until = this.t;
+    }
+    for (const f of this.nades) {
+      if (!this.burning(f)) continue;
+      for (const u of this.units) {
+        if (!u.alive || dist(u.pos, f.to) > FIRE_RADIUS) continue;
+        if (u.team !== f.team) {
+          u.hp -= FIRE_DPS * dt;
+          if (this.isProtected(u)) u.hp = Math.max(1, u.hp);
+          if (u.hp <= 0) {
+            this.kill(this.units[f.thrower], u, false, 'molotov');
+            if (this.phase !== 'live') return;
+            continue;
+          }
+        }
+        this.fleeFire(u, f.to);
+      }
+    }
+  }
+
+  /** Aveugle les adversaires qui voient la flash, surtout s'ils la regardent. */
+  private detonateFlash(n: Projectile) {
+    for (const u of this.units) {
+      if (!u.alive || u.team === n.team) continue;
+      const d = dist(u.pos, n.to);
+      if (d > 320 || !this.sees(u.pos, n.to)) continue;
+      const a = angleDiff(u.angle, Math.atan2(n.to.y - u.pos.y, n.to.x - u.pos.x));
+      const facing = a < 1.0 ? 1 : a < 1.9 ? 0.5 : 0.12;
+      u.flash = Math.max(u.flash, 2.8 * facing * (1 - d / 380));
+    }
+  }
+
+  /** Personne ne reste dans le feu : on sort par le côté le plus proche (le poseur de bombe continue). */
+  private fleeFire(u: Unit, c: Vec) {
+    if (u.task === 'plant') return;
+    if (u.path.length && dist(u.path[0], c) > FIRE_RADIUS + 6) return;
+    if (u.task === 'defuse') u.task = 'retake';
+    const d = Math.max(1, dist(u.pos, c));
+    const out = { x: c.x + ((u.pos.x - c.x) / d) * (FIRE_RADIUS + 20), y: c.y + ((u.pos.y - c.y) / d) * (FIRE_RADIUS + 20) };
+    const dest = gridOf(this.map).walk(out) ? out : scatter(this.map, out, 30, this.rng);
+    u.path = this.pathTo(u.pos, dest);
+    u.speed = this.runSpeed();
+    if (u.hold && dist(u.hold, c) < FIRE_RADIUS + 6) u.hold = dest;
+    u.delay = 0;
+  }
+
+  /** Exécution T : la séquence du site visé, puis l'entrée après les flashs (l'entry en premier). */
+  private startExecute() {
+    if (this.execAt >= 0) return;
+    this.execAt = this.t;
+    const site = this.target;
+    this.planNades('T', UTILITY[this.map.id].execute[site], this.t);
+    const ctSpawn = rectCenter(this.map.ctSpawn);
+    for (const u of this.alive('T')) {
+      if (u.task !== 'stage') continue;
+      u.delay = Math.max(u.delay, 2.6 + (u.player.role === 'RIF' ? -0.3 : this.rng() * 0.7));
+      u.path = u.after.length ? u.after : this.pathTo(u.pos, randomIn(this.map, this.map.sites[site], this.rng, 6));
+      u.hold = u.path[u.path.length - 1] ?? u.pos;
+      u.after = [];
+      u.task = 'move';
+      u.watch = this.watchFrom(u.hold, ctSpawn);
+    }
+    this.rotateTo(site);
+  }
+
+  /** Les CT entendent l'exécution (ou voient deux T) : rotation vers le site. */
+  private rotateTo(s: 'A' | 'B') {
+    if (this.rotated) return;
+    this.rotated = true;
+    this.target = s;
+    for (const u of this.alive('CT')) {
+      if (u.site === s) continue;
+      const hold = randomIn(this.map, this.map.sites[s], this.rng, 6);
+      u.path = this.pathTo(u.pos, hold);
+      u.hold = hold;
+      u.site = s;
+      u.speed = this.runSpeed();
+      u.delay = 0.6 + this.rng() * 0.8;
+      u.watch = this.watchFrom(hold, rectCenter(this.map.tSpawn));
+    }
   }
 
   /* ---------- début de manche ---------- */
@@ -307,14 +457,18 @@ export class LiveMatch {
     this.rush = false;
     this.aiClock = 0;
     this.target = this.rng() < 0.5 ? 'A' : 'B';
-    this.smokes = [];
-    this.ctSmokeAt = -99;
+    this.nades = [];
+    this.pending = [];
+    this.execAt = -1;
+    this.delaysUsed.clear();
+    this.retakeDone = false;
+    this.postMolly = false;
 
     for (const u of this.units) {
       const side = this.sideOf(u.team);
       Object.assign(u, {
         alive: true, hp: 100, path: [], hold: null, site: null, task: 'move', action: 0, target: -1, react: 0,
-        cooldown: 0, lostSight: 0, lastShot: -99, flash: 0, v: 0, replan: 0, smoke: true,
+        cooldown: 0, lostSight: 0, lastShot: -99, flash: 0, v: 0, replan: 0, after: [],
         wander: 1 + this.rng() * 2, delay: side === 'T' ? this.rng() * 3 : this.rng() * 0.8,
       });
       u.pos = randomIn(this.map, side === 'T' ? this.map.tSpawn : this.map.ctSpawn, this.rng, 10);
@@ -327,11 +481,22 @@ export class LiveMatch {
       else if (u.money >= 2400) { spend = Math.round((u.money * 0.7) / 50) * 50; u.weapon = 'smg'; }
       else { spend = Math.min(u.money, 200); u.weapon = 'pistol'; }
       u.money -= spend;
+      // grenades : achat complet = fumigène + flash(s) + molotov ; supports et IGL prennent une flash de plus
+      const role = u.player.role;
+      const sup = role === 'SUP' || role === 'IGL';
+      if (pistol) u.inv = { smoke: sup ? 1 : 0, flash: role === 'SUP' ? 1 : 0, molotov: 0 };
+      else if (u.weapon === 'rifle' || u.weapon === 'awp') u.inv = { smoke: 1, flash: sup ? 2 : 1, molotov: 1 };
+      else if (u.weapon === 'smg') u.inv = { smoke: 1, flash: 1, molotov: 0 };
+      else u.inv = { smoke: 0, flash: role === 'SUP' ? 1 : 0, molotov: 0 };
     }
     this.assignPlan();
     const ts = this.units.filter((u) => this.sideOf(u.team) === 'T');
     const carrier = ts[Math.floor(this.rng() * ts.length)];
     this.bomb = { state: 'carried', pos: null, carrier: carrier.idx, site: null, timer: 0 };
+    // débuts de manche classiques de la carte (ex. fumigène Xbox)
+    for (const e of UTILITY[this.map.id].early) {
+      if (this.rng() < e.p) this.planNades(e.side, [e], 0);
+    }
     this.emit({ type: 'roundStart', round: this.round, half });
     if (this.round === 1) this.chat(5 + Math.floor(this.rng() * 5), 'glhf');
   }
@@ -342,7 +507,6 @@ export class LiveMatch {
     const ts = this.units.filter((u) => this.sideOf(u.team) === 'T');
     const cts = this.units.filter((u) => this.sideOf(u.team) === 'CT');
     const tSpawn = rectCenter(this.map.tSpawn);
-    const ctSpawn = rectCenter(this.map.ctSpawn);
     const primary = this.rng() < 0.5 ? 0 : 1;
     shuffle(ts, this.rng).forEach((u, i) => {
       const via = this.map.routes[site][i < 3 ? primary : 1 - primary];
@@ -353,15 +517,17 @@ export class LiveMatch {
         pts.push(...this.pathTo(from, wp));
         from = wp;
       }
-      u.path = pts;
-      u.hold = end;
+      // point de regroupement à ~210 px du site : on attend l'exécution
+      const [toStage, rest] = splitBefore(u.pos, pts, 210);
+      const stage = toStage[toStage.length - 1] ?? u.pos;
+      u.path = toStage;
+      u.after = rest.length ? rest : [end];
+      u.hold = stage;
+      u.task = 'stage';
       u.site = site;
-      u.watch = this.watchFrom(end, ctSpawn);
+      u.watch = Math.atan2(end.y - stage.y, end.x - stage.x);
       u.angle = u.heading = Math.atan2((pts[0]?.y ?? end.y) - u.pos.y, (pts[0]?.x ?? end.x) - u.pos.x);
     });
-    const sc = rectCenter(this.map.sites[site]);
-    this.execSmokes = [this.alongPath(sc, ctSpawn, 120), this.alongPath(sc, this.map.mid, 110)];
-
     const spots: ('A' | 'A' | 'B' | 'B' | 'M')[] = ['A', 'A', 'B', 'B', 'M'];
     shuffle(cts, this.rng).forEach((u, i) => {
       const s = spots[i];
@@ -402,6 +568,8 @@ export class LiveMatch {
       this.aiClock = 0.25;
       this.think();
     }
+    this.updateNades(dt);
+    if (this.phase !== 'live') return;
     this.combat(dt);
     if (this.phase !== 'live') return;
     this.actions(dt);
@@ -411,48 +579,41 @@ export class LiveMatch {
 
   /* ---------- décisions (4 fois par seconde) ---------- */
   private think() {
-    // les T fument l'entrée CT et l'entrée mid du site en arrivant (les meilleurs en UTL d'abord)
-    if (!this.planted && this.execSmokes.length) {
-      const sc = rectCenter(this.map.sites[this.target]);
-      const throwers = this.alive('T')
-        .filter((u) => u.smoke && u.target < 0 && dist(u.pos, sc) < 340 && dist(u.pos, sc) > 90)
-        .sort((a, b) => b.player.stats.utl - a.player.stats.utl);
-      for (const u of throwers) {
-        if (!this.execSmokes.length) break;
-        if (this.rng() > 0.35 + u.player.stats.utl / 200) continue;
-        this.throwSmoke(u, this.execSmokes.shift()!);
+    const util = UTILITY[this.map.id];
+
+    // exécution T : groupe en place, ou repéré en chemin, ou il se fait tard
+    if (this.execAt < 0 && !this.planted) {
+      const ts = this.alive('T');
+      const staged = ts.filter((u) => u.task === 'stage' && !u.path.length).length;
+      const spotted = ts.some((u) => u.task === 'stage' && u.target >= 0);
+      if (ts.length && (staged >= Math.max(1, ts.length - 1) || spotted || this.t > 45)) this.startExecute();
+    }
+
+    // retardement CT : un T se montre à un passage clé → incendiaire / flash / fumigène prévus pour ce passage
+    if (!this.planted) {
+      util.ctDelay.forEach((d, i) => {
+        if (this.delaysUsed.has(i)) return;
+        if (!this.alive('T').some((u) => dist(u.pos, d.zone) < d.r)) return;
+        this.delaysUsed.add(i);
+        this.planNades('CT', d.nades, this.t + 0.3);
+      });
+    }
+
+    // reprise CT : dès que les CT arrivent près de la bombe, flash au-dessus du site et fumigène sur la garde T
+    if (this.planted && !this.retakeDone && this.bomb.site && this.bomb.pos) {
+      const bp = this.bomb.pos;
+      const cts = this.alive('CT');
+      if (cts.length && cts.filter((u) => dist(u.pos, bp) < 380).length >= Math.min(2, cts.length)) {
+        this.retakeDone = true;
+        this.planNades('CT', util.retake[this.bomb.site], this.t);
       }
     }
-    // les CT fument une avancée ennemie repérée de loin
-    if (this.t - this.ctSmokeAt > 6) {
-      for (const u of this.alive('CT')) {
-        if (!u.smoke || u.target < 0) continue;
-        const e = this.units[u.target];
-        const d = dist(u.pos, e.pos);
-        if (d < 200 || this.rng() > (u.player.stats.utl / 100) * 0.5) continue;
-        this.throwSmoke(u, { x: u.pos.x + (e.pos.x - u.pos.x) * 0.6, y: u.pos.y + (e.pos.y - u.pos.y) * 0.6 });
-        this.ctSmokeAt = this.t;
-        break;
-      }
-    }
-    // les CT tournent vers le site où au moins deux T sont repérés
+
+    // sécurité : deux T sur un site sans exécution → les CT tournent quand même
     if (!this.rotated && !this.planted) {
       for (const s of ['A', 'B'] as const) {
         const c = rectCenter(this.map.sites[s]);
-        const near = this.alive('T').filter((u) => dist(u.pos, c) < 420).length;
-        if (near < 2) continue;
-        this.rotated = true;
-        this.target = s;
-        for (const u of this.alive('CT')) {
-          if (u.site === s) continue;
-          const hold = randomIn(this.map, this.map.sites[s], this.rng, 6);
-          u.path = this.pathTo(u.pos, hold);
-          u.hold = hold;
-          u.site = s;
-          u.speed = this.runSpeed();
-          u.watch = this.watchFrom(hold, rectCenter(this.map.tSpawn));
-        }
-        break;
+        if (this.alive('T').filter((u) => dist(u.pos, c) < 300).length >= 2) { this.rotateTo(s); break; }
       }
     }
 
@@ -485,10 +646,19 @@ export class LiveMatch {
       for (const u of this.alive('CT')) {
         if (u.task === 'defuse') continue;
         u.replan -= 0.25;
-        if (dist(u.pos, bp) < 16 && u.target < 0 && this.canDefuse(u)) {
+        if (dist(u.pos, bp) < 16 && u.target < 0 && !this.inFire(bp) && this.canDefuse(u)) {
           u.task = 'defuse';
           u.action = DEFUSE_TIME;
           u.path = [];
+          // classique : un T molotov la bombe dès qu'il entend le désamorçage
+          if (!this.postMolly) {
+            const thrower = this.alive('T').filter((t) => t.inv.molotov > 0 && dist(t.pos, bp) < 520)
+              .sort((x, y) => dist(x.pos, bp) - dist(y.pos, bp))[0];
+            if (thrower) {
+              this.postMolly = true;
+              this.planNades('T', [{ kind: 'molotov', name: 'Molotov sur la bombe', at: bp, delay: 0.2 }], this.t);
+            }
+          }
           continue;
         }
         if (u.replan > 0) continue;
@@ -531,6 +701,7 @@ export class LiveMatch {
   /** Fin de manche sans pose alors que les T doivent gagner : tout le monde fonce sur le site. */
   private startRush() {
     this.rush = true;
+    this.startExecute();
     const site = this.target;
     for (const u of this.alive('T')) {
       if (u.task === 'pickup' || u.task === 'plant') continue;
@@ -612,7 +783,7 @@ export class LiveMatch {
         }
       }
       // repérage : ennemi dans le champ de vision (ou tout près) avec une ligne de vue
-      if (u.target < 0) {
+      if (u.target < 0 && u.flash < 0.6) {
         let best: Unit | null = null;
         let bd = Infinity;
         for (const e of this.units) {
@@ -630,8 +801,6 @@ export class LiveMatch {
           u.lostSight = 0;
           u.react = Math.max(0.08, 0.16 + ((100 - s.aim) / 100) * 0.35 - (s.pos / 100) * 0.08 + this.rng() * 0.18);
           u.cooldown = 0;
-          // utilitaire : une flash jetée sur l'adversaire de temps en temps
-          if (bd > 120 && this.rng() < (s.utl / 100) * 0.12) best.flash = Math.max(best.flash, 1.1 + this.rng() * 1.2);
         }
       }
       if (u.target < 0 || busy) continue;
@@ -674,19 +843,19 @@ export class LiveMatch {
     if (tgt.hp <= 0) this.kill(u, tgt, hs);
   }
 
-  private kill(k: Unit, v: Unit, hs: boolean) {
+  private kill(k: Unit, v: Unit, hs: boolean, tool?: 'molotov') {
     v.alive = false;
     v.hp = 0;
     v.path = [];
     v.target = -1;
     v.deaths += 1;
     k.kills += 1;
-    k.money = Math.min(16000, k.money + WEAPON[k.weapon].reward);
+    k.money = Math.min(16000, k.money + (tool ? 300 : WEAPON[k.weapon].reward));
     if (k.target === v.idx) k.target = -1;
     if (this.bomb.state === 'carried' && this.bomb.carrier === v.idx) {
       this.bomb = { ...this.bomb, state: 'dropped', pos: { ...v.pos }, carrier: -1 };
     }
-    this.emit({ type: 'kill', killer: k.idx, victim: v.idx, from: { ...k.pos }, to: { ...v.pos }, hs });
+    this.emit({ type: 'kill', killer: k.idx, victim: v.idx, from: { ...k.pos }, to: { ...v.pos }, hs, tool });
     if (this.rng() < 0.1) {
       const speaker = this.rng() < 0.5 ? v : k;
       this.chat(speaker.idx, speaker === v ? ['nt', 'wp', 'gj', 'wow'][Math.floor(this.rng() * 4)] : ['ez', 'nice', ':)'][Math.floor(this.rng() * 3)]);
