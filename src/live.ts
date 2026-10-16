@@ -1,6 +1,6 @@
 import type { Player, Role } from './types';
 import type { MapDef, Vec } from './maps';
-import { findPath, randomIn, scatter, rectCenter, gridOf, placeAt } from './maps';
+import { findPath, randomIn, scatter, rectCenter, gridOf, levelAt } from './maps';
 import { UTILITY, THROW_PRIORITY, NADE_TIME } from './utility';
 import type { NadeKind, NadeSpec } from './utility';
 import { pickPlan, T_LABEL, CT_LABEL } from './tactics';
@@ -1030,7 +1030,7 @@ export class LiveMatch {
     if (this.isProtected(u)) p *= 1.7;
     if (this.rush && this.sideOf(u.team) === 'CT') p *= 0.55;
     // avantage de hauteur : tirer depuis l'étage sur le sol (ou d'en bas vers le haut)
-    const dh = placeAt(this.map, u.pos).level - placeAt(this.map, tgt.pos).level;
+    const dh = levelAt(this.map, u.pos) - levelAt(this.map, tgt.pos);
     if (dh > 0) p *= 1.12;
     else if (dh < 0) p *= 0.9;
     p = Math.min(0.92, Math.max(0.03, p));

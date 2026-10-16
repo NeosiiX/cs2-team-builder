@@ -43,30 +43,30 @@ const P = (name: string, level: -1 | 0 | 1, x: number, y: number, w: number, h: 
 
 export const MAPS: MapDef[] = [
   {
-    id: 'dust2', name: 'Dust II', image: '/maps/dust2.png', w: 1600, h: 1200,
-    view: { x: 300, y: 70, w: 1000, h: 1060 },
-    tSpawn: { x: 540, y: 990, w: 165, h: 80 },
-    ctSpawn: { x: 866, y: 240, w: 92, h: 104 },
-    sites: { A: { x: 1070, y: 218, w: 66, h: 68 }, B: { x: 452, y: 166, w: 80, h: 86 } },
-    bomb: { A: { x: 1102, y: 254 }, B: { x: 490, y: 208 } },
+    // radar Dust II style CS2 (1024 × 1024) : murs noirs, sol du bleu (bas) à l'olive (haut), zone rayée = dénivelé
+    id: 'dust2', name: 'Dust II', image: '/maps/dust2.png', w: 1024, h: 1024,
+    view: { x: 40, y: 8, w: 948, h: 1004 },
+    tSpawn: { x: 298, y: 878, w: 186, h: 74 },
+    ctSpawn: { x: 577, y: 160, w: 34, h: 96 },
+    sites: { A: { x: 784, y: 142, w: 60, h: 60 }, B: { x: 172, y: 86, w: 80, h: 84 } },
+    bomb: { A: { x: 812, y: 172 }, B: { x: 212, y: 130 } },
     routes: {
       A: [
-        [{ x: 900, y: 1040 }, { x: 1010, y: 700 }, { x: 1180, y: 560 }],
-        [{ x: 790, y: 900 }, { x: 760, y: 560 }, { x: 930, y: 470 }, { x: 940, y: 330 }],
+        [{ x: 640, y: 880 }, { x: 700, y: 650 }, { x: 870, y: 520 }, { x: 900, y: 300 }],
+        [{ x: 470, y: 700 }, { x: 490, y: 400 }, { x: 600, y: 400 }, { x: 645, y: 330 }, { x: 700, y: 230 }],
       ],
       B: [
-        [{ x: 560, y: 900 }, { x: 455, y: 640 }, { x: 400, y: 520 }, { x: 385, y: 420 }],
-        [{ x: 790, y: 900 }, { x: 750, y: 540 }, { x: 700, y: 330 }, { x: 600, y: 240 }],
+        [{ x: 230, y: 700 }, { x: 175, y: 560 }, { x: 120, y: 460 }, { x: 115, y: 340 }],
+        [{ x: 470, y: 700 }, { x: 480, y: 300 }, { x: 400, y: 225 }, { x: 290, y: 200 }],
       ],
     },
-    mid: { x: 745, y: 430 },
+    mid: { x: 470, y: 290 },
     places: [
-      P('Pit', -1, 1085, 100, 130, 92), P('Site A', 1, 960, 180, 180, 120), P('Goose', 1, 1140, 150, 75, 60),
-      P('Catwalk', 1, 790, 340, 175, 190), P('Spawn CT', 0, 855, 225, 115, 135),
-      P('Long A', 0, 1060, 290, 210, 260), P('Long doors', 0, 955, 545, 310, 240), P('Outside long', 0, 870, 760, 160, 360),
-      P('Tunnels bas', -1, 555, 465, 165, 65), P('Tunnels', 0, 330, 465, 270, 210),
-      P('Site B', 0, 340, 90, 200, 330), P('Portes B', 0, 530, 190, 120, 160), P('CT mid', 0, 640, 220, 160, 120),
-      P('Mid', 0, 660, 340, 135, 640), P('Spawn T', 0, 330, 660, 620, 460),
+      P('Short A', 1, 614, 150, 72, 220), P('Spawn CT', -1, 560, 150, 56, 115), P('Site A', 1, 680, 120, 195, 145),
+      P('Goose', 1, 790, 15, 135, 105), P('Long A', 0, 840, 200, 135, 260), P('Long doors', 0, 668, 450, 330, 250),
+      P('Outside long', 0, 590, 690, 420, 320), P('Catwalk', 0, 505, 360, 180, 170), P('Tunnels bas', -1, 280, 380, 170, 130),
+      P('Portes B', 0, 255, 140, 150, 130), P('CT mid', -1, 400, 145, 230, 115), P('Mid', 0, 395, 255, 115, 625),
+      P('Site B', 1, 40, 15, 225, 300), P('Tunnels', 1, 50, 300, 260, 300), P('Spawn T', 1, 50, 580, 560, 430),
     ],
   },
   {
@@ -126,6 +126,11 @@ export const MAPS: MapDef[] = [
 
 export const mapById = (id: string): MapDef => MAPS.find((m) => m.id === id) ?? MAPS[0];
 
+/** Étage d'un point : celui du radar s'il le fournit (teinte du sol), sinon celui du lieu nommé. */
+export function levelAt(map: MapDef, p: Vec): -1 | 0 | 1 {
+  return gridOf(map).levelAt(p) ?? placeAt(map, p).level;
+}
+
 const NOWHERE: Place = { name: '', level: 0, r: { x: 0, y: 0, w: 0, h: 0 } };
 /** Lieu (callout + étage) d'un point du radar. */
 export function placeAt(map: MapDef, p: Vec): Place {
@@ -145,6 +150,8 @@ interface GridData {
   /** cellules qu'on ne traverse que dans un sens (saut de corniche) : index → [dx, dy] */
   oneway?: Record<string, [number, number]>;
   los: { scale: number; cols: number; rows: number; bits: string };
+  /** étage de chaque cellule ('0' = bas, '1' = sol, '2' = haut), lu dans la teinte du radar (style CS2) */
+  levels?: string | null;
 }
 
 function decode(b64: string): Uint8Array {
@@ -174,7 +181,17 @@ export class Grid {
     this.wallCols = g.los.cols;
     this.wallRows = g.los.rows;
     this.wallScale = g.los.scale;
+    this.levels = g.levels ?? null;
     this.oneway = new Map(Object.entries(g.oneway ?? {}).map(([k, v]) => [Number(k), v]));
+  }
+  levels: string | null;
+  /** Étage lu sur le radar (-1, 0, 1), ou null si la carte n'a pas cette information. */
+  levelAt(p: Vec): -1 | 0 | 1 | null {
+    if (!this.levels) return null;
+    const c = Math.floor(p.x / this.cell);
+    const r = Math.floor(p.y / this.cell);
+    if (c < 0 || r < 0 || c >= this.cols || r >= this.rows) return null;
+    return (this.levels.charCodeAt(r * this.cols + c) - 49) as -1 | 0 | 1;
   }
   /** sens autorisé des cellules à sens unique */
   oneway: Map<number, [number, number]>;

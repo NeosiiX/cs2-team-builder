@@ -51,30 +51,31 @@ const f = (name: string, x: number, y: number, delay = 0): NadeSpec => ({ kind: 
 
 export const UTILITY: Record<string, MapUtility> = {
   dust2: {
+    // positions sur le radar Dust II style CS2 (1024 × 1024)
     execute: {
       A: [
-        s('Fumée CT', 1030, 285, 0), s('Fumée Cross', 1150, 330, 0.3),
-        m('Molotov Goose', 1175, 175, 1.0), m('Molotov Default', 1100, 250, 1.3),
-        f('Flash Long', 1180, 430, 2.0), f('Flash site A', 1100, 225, 2.3),
+        s('Fumée CT', 712, 222, 0), s('Fumée Cross', 880, 250, 0.3),
+        m('Molotov Goose', 860, 120, 1.0), m('Molotov Default', 812, 172, 1.3),
+        f('Flash Long', 905, 330, 2.0), f('Flash site A', 805, 160, 2.3),
       ],
       B: [
-        s('Fumée Portes B', 565, 235, 0), s('Fumée Fenêtre', 565, 300, 0.3),
-        m('Molotov Back plat', 385, 135, 1.0), m('Molotov Default B', 490, 205, 1.3),
-        f('Flash sortie tunnel', 420, 360, 2.0), f('Flash site B', 470, 240, 2.3),
+        s('Fumée Portes B', 395, 232, 0), s('Fumée Fenêtre', 290, 150, 0.3),
+        m('Molotov Back plat', 110, 60, 1.0), m('Molotov Default B', 212, 130, 1.3),
+        f('Flash sortie tunnel', 115, 300, 2.0), f('Flash site B', 200, 150, 2.3),
       ],
     },
     ctDelay: [
-      { zone: { x: 1110, y: 650 }, r: 150, nades: [m('Incendiaire Long doors', 1000, 700, 0), f('Flash Long', 1180, 560, 0.4)] },
-      { zone: { x: 450, y: 540 }, r: 150, nades: [m('Incendiaire Tunnels', 410, 430, 0), f('Flash sortie tunnel', 430, 380, 0.5)] },
-      { zone: { x: 870, y: 490 }, r: 100, nades: [m('Incendiaire Short', 925, 420, 0)] },
+      { zone: { x: 740, y: 620 }, r: 100, nades: [m('Incendiaire Long doors', 700, 625, 0), f('Flash Long', 860, 560, 0.4)] },
+      { zone: { x: 150, y: 480 }, r: 110, nades: [m('Incendiaire Tunnels', 115, 360, 0), f('Flash sortie tunnel', 120, 330, 0.5)] },
+      { zone: { x: 575, y: 410 }, r: 75, nades: [m('Incendiaire Short', 640, 345, 0)] },
     ],
     retake: {
-      A: [f('Flash retake A', 1100, 240, 0), s('Fumée Long', 1185, 390, 0.3)],
-      B: [f('Flash retake B', 480, 220, 0), s('Fumée Tunnels', 410, 400, 0.3)],
+      A: [f('Flash retake A', 812, 172, 0), s('Fumée Long', 905, 330, 0.3)],
+      B: [f('Flash retake B', 212, 130, 0), s('Fumée Tunnels', 115, 350, 0.3)],
     },
     early: [
-      { side: 'T', p: 0.7, ...s('Fumée Xbox', 765, 470, 6) },
-      { side: 'CT', p: 0.5, ...s('Fumée Mid doors', 760, 345, 3) },
+      { side: 'T', p: 0.7, ...s('Fumée Xbox', 470, 575, 6) },
+      { side: 'CT', p: 0.5, ...s('Fumée Mid doors', 470, 270, 3) },
     ],
   },
   mirage: {
