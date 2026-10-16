@@ -93,19 +93,49 @@ export const MAPS: MapDef[] = [
 export const mapById = (id: string): MapDef => MAPS.find((m) => m.id === id) ?? MAPS[0];
 
 /* ---------- grille des zones praticables ---------- */
+interface GridData {
+  cell: number;
+  cols: number;
+  rows: number;
+  bits: string;
+  los: { scale: number; cols: number; rows: number; bits: string };
+}
+
+function decode(b64: string): Uint8Array {
+  const raw = atob(b64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
 export class Grid {
   cols: number;
   rows: number;
   cell: number;
   private bits: Uint8Array;
+  /** murs pour la ligne de vue (demi-résolution du radar) */
+  private wall: Uint8Array;
+  private wallCols: number;
+  private wallRows: number;
+  private wallScale: number;
 
-  constructor(g: { cell: number; cols: number; rows: number; bits: string }) {
+  constructor(g: GridData) {
     this.cols = g.cols;
     this.rows = g.rows;
     this.cell = g.cell;
-    const raw = atob(g.bits);
-    this.bits = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i++) this.bits[i] = raw.charCodeAt(i);
+    this.bits = decode(g.bits);
+    this.wall = decode(g.los.bits);
+    this.wallCols = g.los.cols;
+    this.wallRows = g.los.rows;
+    this.wallScale = g.los.scale;
+  }
+  /** Mur (ou caisse, ou fond) à cet endroit pour la vue ? */
+  solid(x: number, y: number): boolean {
+    const c = Math.floor(x / this.wallScale);
+    const r = Math.floor(y / this.wallScale);
+    if (c < 0 || r < 0 || c >= this.wallCols || r >= this.wallRows) return true;
+    const i = r * this.wallCols + c;
+    return ((this.wall[i >> 3] >> (7 - (i & 7))) & 1) === 1;
   }
   walkCell(c: number, r: number): boolean {
     if (c < 0 || r < 0 || c >= this.cols || r >= this.rows) return false;
@@ -153,13 +183,15 @@ export class Grid {
   center(c: number, r: number): Vec {
     return { x: (c + 0.5) * this.cell, y: (r + 0.5) * this.cell };
   }
-  /** Ligne de vue : aucun mur ni caisse entre a et b. */
+  /** Ligne de vue : aucun mur, trait de mur ni caisse du radar entre a et b (vérifié tous les 1,5 px). */
   los(a: Vec, b: Vec): boolean {
     const len = Math.hypot(b.x - a.x, b.y - a.y);
-    const steps = Math.ceil(len / 5);
-    for (let i = 1; i < steps; i++) {
+    if (len < 12) return true;
+    const steps = Math.ceil(len / 1.5);
+    const skip = Math.ceil(5 / 1.5); // on ignore les 5 premiers / derniers px (le joueur peut frôler un mur)
+    for (let i = skip; i <= steps - skip; i++) {
       const t = i / steps;
-      if (!this.walk({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })) return false;
+      if (this.solid(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)) return false;
     }
     return true;
   }
@@ -184,7 +216,7 @@ const gridCache = new Map<string, Grid>();
 export function gridOf(map: MapDef): Grid {
   let g = gridCache.get(map.id);
   if (!g) {
-    g = new Grid((grids as Record<string, { cell: number; cols: number; rows: number; bits: string }>)[map.id]);
+    g = new Grid((grids as unknown as Record<string, GridData>)[map.id]);
     gridCache.set(map.id, g);
   }
   return g;

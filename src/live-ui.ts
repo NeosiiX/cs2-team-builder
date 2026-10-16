@@ -160,7 +160,7 @@ export function startLive(opts: LiveUIOptions) {
     switch (e.type) {
       case 'roundStart':
         bannerEl.classList.remove('show');
-        if (e.half) notice('Mi-temps : changement de côté', 2800);
+        notice(`${e.half ? 'Mi-temps · ' : ''}T : ${e.plan.t}  ·  CT : ${e.plan.ct}`, 3400);
         break;
       case 'kill': {
         shots.push({ from: e.from, to: e.to, born: now });

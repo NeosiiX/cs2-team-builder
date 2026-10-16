@@ -565,7 +565,7 @@ main { padding: 28px 32px 48px; max-width: 1440px; margin: 0 auto; }
 .ch-txt { color: #e8eef9; }
 .lm-notice {
   position: absolute; left: 50%; top: 12px; transform: translate(-50%, -8px); opacity: 0; transition: opacity 0.2s, transform 0.2s;
-  background: rgba(10, 18, 34, 0.92); border: 1px solid var(--border-strong); padding: 6px 16px; border-radius: 999px; font-weight: 600; pointer-events: none; white-space: nowrap;
+  background: rgba(10, 18, 34, 0.92); border: 1px solid var(--border-strong); padding: 6px 16px; border-radius: 999px; font-weight: 600; font-size: 0.86rem; pointer-events: none; white-space: nowrap; max-width: 94%; overflow: hidden; text-overflow: ellipsis;
 }
 .lm-notice.show { opacity: 1; transform: translate(-50%, 0); }
 .lm-banner {

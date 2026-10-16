@@ -3,6 +3,8 @@ import type { MapDef, Vec } from './maps';
 import { findPath, randomIn, scatter, rectCenter, gridOf } from './maps';
 import { UTILITY, THROW_PRIORITY, NADE_TIME } from './utility';
 import type { NadeKind, NadeSpec } from './utility';
+import { pickPlan, T_LABEL, CT_LABEL } from './tactics';
+import type { RoundPlan, History, Eco } from './tactics';
 
 /**
  * Moteur du match en direct (sans DOM).
@@ -103,14 +105,14 @@ export function buildOpponentRoster(all: Player[], mine: Player[], target: numbe
 /* ---------- armes ---------- */
 export type Weapon = 'pistol' | 'smg' | 'rifle' | 'awp';
 const WEAPON: Record<Weapon, { interval: number; acc: number; range: number; body: [number, number]; hs: number; reward: number }> = {
-  pistol: { interval: 0.26, acc: 0.85, range: 700, body: [14, 24], hs: 92, reward: 300 },
-  smg: { interval: 0.1, acc: 0.82, range: 650, body: [15, 24], hs: 70, reward: 600 },
-  rifle: { interval: 0.13, acc: 1, range: 1100, body: [23, 33], hs: 100, reward: 300 },
-  awp: { interval: 1.45, acc: 1.12, range: 1600, body: [100, 100], hs: 100, reward: 100 },
+  pistol: { interval: 0.26, acc: 0.85, range: 360, body: [14, 24], hs: 92, reward: 300 },
+  smg: { interval: 0.1, acc: 0.82, range: 430, body: [15, 24], hs: 70, reward: 600 },
+  rifle: { interval: 0.13, acc: 1, range: 640, body: [23, 33], hs: 100, reward: 300 },
+  awp: { interval: 1.45, acc: 1.12, range: 1100, body: [100, 100], hs: 100, reward: 100 },
 };
 
 /* ---------- le match ---------- */
-type Task = 'move' | 'stage' | 'hold' | 'plant' | 'defuse' | 'pickup' | 'retake' | 'hunt';
+type Task = 'move' | 'stage' | 'hold' | 'plant' | 'defuse' | 'pickup' | 'retake' | 'hunt' | 'lurk' | 'push';
 
 export interface Unit {
   idx: number;
@@ -153,11 +155,15 @@ export interface Unit {
   inv: Record<NadeKind, number>;
   /** fin du trajet des T après le point de regroupement */
   after: Vec[];
+  /** CT agressif : poste de repli et moment du repli ; T lurker */
+  home: Vec | null;
+  retreatAt: number;
+  lurker: boolean;
 }
 
 export type EndReason = 'elim' | 'bomb' | 'defuse' | 'time';
 export type LiveEvent =
-  | { type: 'roundStart'; round: number; half?: boolean }
+  | { type: 'roundStart'; round: number; half?: boolean; plan: { t: string; ct: string } }
   | { type: 'kill'; killer: number; victim: number; from: Vec; to: Vec; hs: boolean; tool?: 'molotov' }
   | { type: 'nade'; kind: NadeKind; name: string; at: Vec; team: 0 | 1 }
   | { type: 'plant'; site: 'A' | 'B' }
@@ -229,6 +235,14 @@ export class LiveMatch {
   private delaysUsed = new Set<number>();
   private retakeDone = false;
   private postMolly = false;
+  /** plan de la manche (stratégie T, placement CT) et historique pour varier */
+  plan!: RoundPlan;
+  private history: History = { t: [], ct: [], tLost: false };
+  private fakeAt = -1;
+  private pendingRotate: { site: 'A' | 'B'; at: number } | null = null;
+  private lurkGone = false;
+  /** temps réel de manche (le chrono affiché peut attendre la pose) */
+  private liveTime = 0;
 
   constructor(mine: Player[], opp: Player[], finalScore: [number, number], map: MapDef, rng: Rng = Math.random) {
     this.map = map;
@@ -242,7 +256,7 @@ export class LiveMatch {
         idx: i, team: i < 5 ? 0 : 1, player, name: player.nickname, pos: { x: 0, y: 0 }, path: [], speed: RUN, v: 0,
         heading: 0, angle: 0, watch: 0, flash: 0, hold: null, wander: 0, delay: 0, hp: 100, alive: true, kills: 0, deaths: 0,
         money: 800, weapon: 'pistol', site: null, task: 'move', action: 0, target: -1, react: 0, cooldown: 0, lostSight: 0,
-        lastShot: -99, replan: 0, inv: { smoke: 0, flash: 0, molotov: 0 }, after: [],
+        lastShot: -99, replan: 0, inv: { smoke: 0, flash: 0, molotov: 0 }, after: [], home: null, retreatAt: -1, lurker: false,
       });
     });
     this.startRound();
@@ -316,13 +330,13 @@ export class LiveMatch {
 
   /* ---------- module de stuff ---------- */
   /** Répartit une séquence du module entre les joueurs d'un camp, selon leur rôle et ce qu'ils ont en poche. */
-  private planNades(side: Side, specs: NadeSpec[], t0: number) {
+  private planNades(side: Side, specs: NadeSpec[], t0: number, only: (u: Unit) => boolean = () => true) {
     const perPlayer = new Map<number, number>();
     for (const spec of specs) {
       const pri = THROW_PRIORITY[spec.kind];
       const left = (u: Unit) => u.inv[spec.kind] - this.pending.filter((p) => p.u === u.idx && p.spec.kind === spec.kind).length;
       const cand = this.alive(side)
-        .filter((u) => left(u) > 0 && (perPlayer.get(u.idx) ?? 0) < 2 && u.task !== 'plant' && u.task !== 'defuse')
+        .filter((u) => only(u) && left(u) > 0 && (perPlayer.get(u.idx) ?? 0) < 2 && u.task !== 'plant' && u.task !== 'defuse')
         .sort((a, b) => pri.indexOf(a.player.role) - pri.indexOf(b.player.role) || dist(a.pos, spec.at) - dist(b.pos, spec.at))[0];
       if (!cand) continue;
       perPlayer.set(cand.idx, (perPlayer.get(cand.idx) ?? 0) + 1);
@@ -408,38 +422,56 @@ export class LiveMatch {
     u.delay = 0;
   }
 
-  /** Exécution T : la séquence du site visé, puis l'entrée après les flashs (l'entry en premier). */
-  private startExecute() {
+  /**
+   * Exécution T sur le site visé. `hot` = déclenchée au contact (pas d'attente des flashs, stuff resserré).
+   * Chaque grenade a une petite chance d'être sautée : deux exécutions ne sont jamais identiques.
+   */
+  private startExecute(hot = false) {
     if (this.execAt >= 0) return;
     this.execAt = this.t;
     const site = this.target;
-    this.planNades('T', UTILITY[this.map.id].execute[site], this.t);
+    const all = UTILITY[this.map.id].execute[site];
+    let specs = all.filter((_n, i) => i === 0 || this.rng() > 0.18);
+    if (this.plan.t === 'rush') specs = all.filter((n) => n.kind !== 'smoke' || this.rng() < 0.4);
+    if (hot) specs = specs.map((n) => ({ ...n, delay: n.delay * 0.45 }));
+    this.planNades('T', specs, this.t, (u) => !u.lurker);
     const ctSpawn = rectCenter(this.map.ctSpawn);
+    const wait = hot || this.plan.t === 'rush' ? 0 : 2.4;
     for (const u of this.alive('T')) {
-      if (u.task !== 'stage') continue;
-      u.delay = Math.max(u.delay, 2.6 + (u.player.role === 'RIF' ? -0.3 : this.rng() * 0.7));
-      u.path = u.after.length ? u.after : this.pathTo(u.pos, randomIn(this.map, this.map.sites[site], this.rng, 6));
-      u.hold = u.path[u.path.length - 1] ?? u.pos;
-      u.after = [];
+      if (u.lurker && this.plan.t === 'lurk') continue;
+      if (u.task === 'pickup' || u.task === 'plant') continue;
+      if (u.task === 'stage' || u.lurker) {
+        u.path = u.after.length ? u.after : this.pathTo(u.pos, randomIn(this.map, this.map.sites[site], this.rng, 6));
+        u.after = [];
+        u.lurker = false;
+      }
+      u.hold = u.path[u.path.length - 1] ?? u.hold ?? u.pos;
       u.task = 'move';
-      u.watch = this.watchFrom(u.hold, ctSpawn);
+      u.speed = this.runSpeed();
+      u.delay = wait ? Math.max(u.delay, wait + (u.player.role === 'RIF' ? -0.3 : this.rng() * 0.7)) : this.rng() * 0.3;
+      u.watch = this.watchFrom(u.hold!, ctSpawn);
     }
-    this.rotateTo(site);
+    // les CT entendent l'exécution un peu plus tard
+    this.pendingRotate = { site, at: this.t + 0.8 + this.rng() * 1.2 };
   }
 
-  /** Les CT entendent l'exécution (ou voient deux T) : rotation vers le site. */
-  private rotateTo(s: 'A' | 'B') {
-    if (this.rotated) return;
+  /** Rotation CT vers un site (`force` : même si on a déjà tourné, ex. après un fake). */
+  private rotateTo(s: 'A' | 'B', force = false) {
+    if (this.rotated && !force) return;
     this.rotated = true;
     this.target = s;
     for (const u of this.alive('CT')) {
-      if (u.site === s) continue;
+      if (u.site === s && u.task !== 'push') continue;
+      // tout le monde ne tourne pas : un CT garde parfois son site
+      if (u.site !== 'M' && u.task !== 'push' && this.rng() < 0.2) continue;
       const hold = randomIn(this.map, this.map.sites[s], this.rng, 6);
       u.path = this.pathTo(u.pos, hold);
       u.hold = hold;
+      u.home = hold;
       u.site = s;
+      u.task = 'hold';
+      u.retreatAt = -1;
       u.speed = this.runSpeed();
-      u.delay = 0.6 + this.rng() * 0.8;
       u.watch = this.watchFrom(hold, rectCenter(this.map.tSpawn));
     }
   }
@@ -463,12 +495,16 @@ export class LiveMatch {
     this.delaysUsed.clear();
     this.retakeDone = false;
     this.postMolly = false;
+    this.fakeAt = -1;
+    this.pendingRotate = null;
+    this.lurkGone = false;
+    this.liveTime = 0;
 
     for (const u of this.units) {
       const side = this.sideOf(u.team);
       Object.assign(u, {
         alive: true, hp: 100, path: [], hold: null, site: null, task: 'move', action: 0, target: -1, react: 0,
-        cooldown: 0, lostSight: 0, lastShot: -99, flash: 0, v: 0, replan: 0, after: [],
+        cooldown: 0, lostSight: 0, lastShot: -99, flash: 0, v: 0, replan: 0, after: [], home: null, retreatAt: -1, lurker: false,
         wander: 1 + this.rng() * 2, delay: side === 'T' ? this.rng() * 3 : this.rng() * 0.8,
       });
       u.pos = randomIn(this.map, side === 'T' ? this.map.tSpawn : this.map.ctSpawn, this.rng, 10);
@@ -489,6 +525,16 @@ export class LiveMatch {
       else if (u.weapon === 'smg') u.inv = { smoke: 1, flash: 1, molotov: 0 };
       else u.inv = { smoke: 0, flash: role === 'SUP' ? 1 : 0, molotov: 0 };
     }
+    // plan de manche selon l'économie des deux camps
+    const ecoOf = (side: Side): Eco => {
+      if (pistol) return 'pistol';
+      const us = this.units.filter((u) => this.sideOf(u.team) === side);
+      const full = us.filter((u) => u.weapon === 'rifle' || u.weapon === 'awp').length;
+      const half = us.filter((u) => u.weapon === 'smg').length;
+      return full >= 4 ? 'full' : full + half >= 3 ? 'half' : 'eco';
+    };
+    this.plan = pickPlan(ecoOf('T'), ecoOf('CT'), this.history, this.rng);
+    this.target = this.plan.site;
     this.assignPlan();
     const ts = this.units.filter((u) => this.sideOf(u.team) === 'T');
     const carrier = ts[Math.floor(this.rng() * ts.length)];
@@ -497,46 +543,138 @@ export class LiveMatch {
     for (const e of UTILITY[this.map.id].early) {
       if (this.rng() < e.p) this.planNades(e.side, [e], 0);
     }
-    this.emit({ type: 'roundStart', round: this.round, half });
+    const siteTxt = this.plan.t === 'default' || this.plan.t === 'contact' ? '' : ` ${this.plan.site}`;
+    this.emit({ type: 'roundStart', round: this.round, half, plan: { t: T_LABEL[this.plan.t] + siteTxt, ct: CT_LABEL[this.plan.ct] } });
     if (this.round === 1) this.chat(5 + Math.floor(this.rng() * 5), 'glhf');
   }
 
-  /** Les T prennent leurs routes vers le site visé, les CT se répartissent sur A, B et le milieu. */
+  /** Point situé à `d` px le long du chemin de `a` vers `b`. */
+  private alongPath(a: Vec, b: Vec, d: number): Vec {
+    let p = a;
+    let left = d;
+    for (const q of this.pathTo(a, b)) {
+      const l = dist(p, q);
+      if (l >= left) return { x: p.x + ((q.x - p.x) / l) * left, y: p.y + ((q.y - p.y) / l) * left };
+      left -= l;
+      p = q;
+    }
+    return p;
+  }
+
+  /** Trajet d'un T : itinéraire k du site, jusqu'à `end`. */
+  private routePath(from: Vec, site: 'A' | 'B', k: number, end: Vec): Vec[] {
+    const pts: Vec[] = [];
+    let p = from;
+    for (const wp of [...this.map.routes[site][k], end]) {
+      pts.push(...this.pathTo(p, wp));
+      p = wp;
+    }
+    return pts;
+  }
+
+  /** Place les deux équipes selon le plan de la manche. */
   private assignPlan() {
-    const site = this.target;
-    const ts = this.units.filter((u) => this.sideOf(u.team) === 'T');
-    const cts = this.units.filter((u) => this.sideOf(u.team) === 'CT');
+    const plan = this.plan;
+    const site = plan.site;
+    const other = site === 'A' ? 'B' : 'A';
+    const ts = shuffle(this.units.filter((u) => this.sideOf(u.team) === 'T'), this.rng);
+    const cts = shuffle(this.units.filter((u) => this.sideOf(u.team) === 'CT'), this.rng);
     const tSpawn = rectCenter(this.map.tSpawn);
+    const ctSpawn = rectCenter(this.map.ctSpawn);
     const primary = this.rng() < 0.5 ? 0 : 1;
-    shuffle(ts, this.rng).forEach((u, i) => {
-      const via = this.map.routes[site][i < 3 ? primary : 1 - primary];
+
+    /* ----- T ----- */
+    // lurker (fake / lurk) : de préférence le joueur LRK
+    ts.sort((x, y) => (x.player.role === 'LRK' ? 1 : 0) - (y.player.role === 'LRK' ? 1 : 0));
+    const controlPts = shuffle([
+      ...this.map.routes.A.map((r) => r[Math.floor(r.length / 2)]),
+      ...this.map.routes.B.map((r) => r[Math.floor(r.length / 2)]),
+      ...this.map.routes[site].map((r) => r[Math.max(0, r.length - 2)]),
+    ], this.rng);
+
+    ts.forEach((u, i) => {
+      const k = i < plan.groups[0] ? primary : 1 - primary;
       const end = randomIn(this.map, this.map.sites[site], this.rng, 6);
-      const pts: Vec[] = [];
-      let from = u.pos;
-      for (const wp of [...via, end]) {
-        pts.push(...this.pathTo(from, wp));
-        from = wp;
-      }
-      // point de regroupement à ~210 px du site : on attend l'exécution
-      const [toStage, rest] = splitBefore(u.pos, pts, 210);
-      const stage = toStage[toStage.length - 1] ?? u.pos;
-      u.path = toStage;
-      u.after = rest.length ? rest : [end];
-      u.hold = stage;
-      u.task = 'stage';
       u.site = site;
-      u.watch = Math.atan2(end.y - stage.y, end.x - stage.x);
-      u.angle = u.heading = Math.atan2((pts[0]?.y ?? end.y) - u.pos.y, (pts[0]?.x ?? end.x) - u.pos.x);
+      u.lurker = false;
+      u.watch = this.watchFrom(end, ctSpawn);
+
+      if (plan.t === 'rush' || plan.t === 'contact') {
+        u.path = this.routePath(u.pos, site, k, end);
+        u.hold = end;
+        u.task = 'move';
+        u.delay = this.rng() * (plan.t === 'rush' ? 0.6 : 2);
+        u.speed = plan.t === 'rush' ? this.runSpeed() * 1.12 : RUN * 0.55; // contact : on avance en marchant
+      } else if (plan.t === 'default') {
+        const cp = controlPts[i % controlPts.length];
+        u.path = this.pathTo(u.pos, cp);
+        u.after = [];
+        u.hold = cp;
+        u.task = 'stage';
+        u.watch = this.watchFrom(cp, ctSpawn);
+      } else {
+        const lurk = (plan.t === 'lurk' && i === ts.length - 1) || (plan.t === 'fake' && i >= ts.length - 2);
+        const s2 = lurk ? other : site;
+        const end2 = lurk ? randomIn(this.map, this.map.sites[other], this.rng, 6) : end;
+        const pts = this.routePath(u.pos, s2, lurk ? Math.floor(this.rng() * 2) : k, end2);
+        const [toStage, rest] = splitBefore(u.pos, pts, plan.stage + (lurk ? 60 : 0));
+        const stage = toStage[toStage.length - 1] ?? u.pos;
+        u.path = toStage;
+        u.after = lurk ? [] : rest.length ? rest : [end];
+        u.hold = stage;
+        u.task = lurk && plan.t === 'lurk' ? 'lurk' : 'stage';
+        u.lurker = lurk;
+        u.site = s2;
+        u.watch = Math.atan2(end2.y - stage.y, end2.x - stage.x);
+      }
+      const first = u.path[0] ?? end;
+      u.angle = u.heading = Math.atan2(first.y - u.pos.y, first.x - u.pos.x);
     });
-    const spots: ('A' | 'A' | 'B' | 'B' | 'M')[] = ['A', 'A', 'B', 'B', 'M'];
-    shuffle(cts, this.rng).forEach((u, i) => {
+
+    /* ----- CT ----- */
+    const layout: Record<string, ('A' | 'B' | 'M')[]> = {
+      standard: ['A', 'A', 'B', 'B', 'M'],
+      stackA: ['A', 'A', 'A', 'M', 'B'],
+      stackB: ['B', 'B', 'B', 'M', 'A'],
+      aggro: ['A', 'A', 'B', 'B', 'M'],
+      deep: ['A', 'A', 'B', 'B', 'M'],
+    };
+    const spots = layout[plan.ct];
+    // l'agressif : un RIF ou l'AWP
+    const aggroIdx = plan.ct === 'aggro' ? Math.max(0, cts.findIndex((u) => u.player.role === 'RIF' || u.player.role === 'AWP')) : -1;
+    cts.forEach((u, i) => {
       const s = spots[i];
       u.site = s;
-      const hold = s === 'M' ? scatter(this.map, this.map.mid, 22, this.rng) : randomIn(this.map, this.map.sites[s], this.rng, 6);
-      u.path = this.pathTo(u.pos, hold);
-      u.hold = hold;
-      u.watch = this.watchFrom(hold, tSpawn);
-      u.angle = u.heading = Math.atan2((u.path[0]?.y ?? hold.y) - u.pos.y, (u.path[0]?.x ?? hold.x) - u.pos.x);
+      let hold: Vec;
+      if (s === 'M') hold = scatter(this.map, this.map.mid, 26, this.rng);
+      else {
+        const c = rectCenter(this.map.sites[s]);
+        const r = this.rng();
+        // poste sur le site, avancé (vers l'entrée T) ou reculé (vers le spawn CT)
+        if (plan.ct === 'deep' || r < 0.2) hold = scatter(this.map, this.alongPath(c, ctSpawn, 70 + this.rng() * 50), 14, this.rng);
+        else if (r < 0.45) hold = scatter(this.map, this.alongPath(c, tSpawn, 60 + this.rng() * 60), 14, this.rng);
+        else hold = randomIn(this.map, this.map.sites[s], this.rng, 6);
+      }
+      u.home = hold;
+      u.retreatAt = -1;
+      u.task = 'hold';
+      if (i === aggroIdx) {
+        // push pour l'info : sur un itinéraire T, puis repli
+        const routes = [...this.map.routes.A, ...this.map.routes.B];
+        const r = routes[Math.floor(this.rng() * routes.length)];
+        const spot = scatter(this.map, r[Math.min(r.length - 1, 1 + Math.floor(this.rng() * 2))], 16, this.rng);
+        u.path = this.pathTo(u.pos, spot);
+        u.hold = spot;
+        u.task = 'push';
+        u.retreatAt = 14 + this.rng() * 10;
+        u.watch = this.watchFrom(spot, tSpawn);
+      } else {
+        u.path = this.pathTo(u.pos, hold);
+        u.hold = hold;
+        u.watch = this.watchFrom(hold, tSpawn);
+      }
+      const first = u.path[0] ?? hold;
+      u.angle = u.heading = Math.atan2(first.y - u.pos.y, first.x - u.pos.x);
     });
   }
 
@@ -549,6 +687,13 @@ export class LiveMatch {
       return;
     }
     this.t += dt;
+    this.liveTime += dt;
+    // filet de sécurité : une manche ne s'éternise jamais
+    if (this.liveTime > 200) {
+      const lose = this.winTeam === 0 ? 1 : 0;
+      for (const u of this.units) if (u.team === lose && u.alive) { u.alive = false; u.hp = 0; }
+      return this.endRound(this.winTeam, this.planted ? (this.winSide === 'T' ? 'bomb' : 'defuse') : this.winSide === 'CT' ? 'time' : 'elim');
+    }
 
     if (this.planted) {
       this.bomb.timer -= dt;
@@ -581,12 +726,66 @@ export class LiveMatch {
   private think() {
     const util = UTILITY[this.map.id];
 
-    // exécution T : groupe en place, ou repéré en chemin, ou il se fait tard
+    // ----- T : déroulé de la stratégie -----
     if (this.execAt < 0 && !this.planted) {
       const ts = this.alive('T');
-      const staged = ts.filter((u) => u.task === 'stage' && !u.path.length).length;
-      const spotted = ts.some((u) => u.task === 'stage' && u.target >= 0);
-      if (ts.length && (staged >= Math.max(1, ts.length - 1) || spotted || this.t > 45)) this.startExecute();
+      const core = ts.filter((u) => !u.lurker);
+      const staged = core.filter((u) => u.task === 'stage' && !u.path.length).length;
+      const spotted = core.some((u) => u.target >= 0 && u.lostSight === 0);
+      const siteC = rectCenter(this.map.sites[this.target]);
+      const plan = this.plan.t;
+      if (plan === 'rush') {
+        if (ts.some((u) => dist(u.pos, siteC) < 320)) this.startExecute(true);
+      } else if (plan === 'contact') {
+        if (spotted) this.startExecute(true);
+        else if (this.t > this.plan.timing) this.startExecute(false);
+      } else if (plan === 'default') {
+        if (this.t > this.plan.timing) this.startExecute(false);
+      } else if (plan === 'fake') {
+        const fakers = ts.filter((u) => u.lurker);
+        if (this.fakeAt < 0 && (fakers.length && fakers.every((u) => !u.path.length) || this.t > this.plan.timing * 0.8)) {
+          // le fake : un peu de stuff sur l'autre site pour faire tourner les CT
+          this.fakeAt = this.t;
+          const fakeSite = this.target === 'A' ? 'B' : 'A';
+          const fake = UTILITY[this.map.id].execute[fakeSite].filter((n, i) => i === 0 || (n.kind === 'flash' && this.rng() < 0.6) || (n.kind === 'molotov' && this.rng() < 0.4));
+          this.planNades('T', fake, this.t, (u) => u.lurker);
+          this.pendingRotate = { site: fakeSite, at: this.t + 1.5 };
+        }
+        if (this.fakeAt >= 0 && this.t > this.fakeAt + 7 + this.rng() * 0.5) this.startExecute(false);
+        else if (spotted && this.fakeAt >= 0) this.startExecute(true);
+      } else if (spotted || staged >= Math.max(1, core.length - 1) || this.t > this.plan.timing) {
+        this.startExecute(spotted);
+      }
+    }
+    // lurker : quand l'exécution est lancée, il coupe la route de rotation des CT
+    if (this.plan.t === 'lurk' && this.execAt >= 0 && !this.lurkGone && this.t > this.execAt + 4) {
+      this.lurkGone = true;
+      const l = this.alive('T').find((u) => u.lurker);
+      if (l) {
+        const other = this.target === 'A' ? 'B' : 'A';
+        const flank = scatter(this.map, this.alongPath(rectCenter(this.map.sites[other]), rectCenter(this.map.sites[this.target]), 180), 20, this.rng);
+        l.path = this.pathTo(l.pos, flank);
+        l.hold = flank;
+        l.task = 'move';
+        l.speed = RUN * 0.6;
+        l.watch = this.watchFrom(flank, rectCenter(this.map.sites[this.target]));
+      }
+    }
+    // rotation CT programmée (après avoir « entendu » une exécution ou un fake)
+    if (this.pendingRotate && this.t >= this.pendingRotate.at && !this.planted) {
+      this.rotateTo(this.pendingRotate.site, true);
+      this.pendingRotate = null;
+    }
+    // CT agressif : repli vers son poste
+    for (const u of this.alive('CT')) {
+      if (u.retreatAt > 0 && this.t >= u.retreatAt && u.target < 0 && u.home) {
+        u.retreatAt = -1;
+        u.task = 'hold';
+        u.path = this.pathTo(u.pos, u.home);
+        u.hold = u.home;
+        u.speed = this.runSpeed();
+        u.watch = this.watchFrom(u.home, rectCenter(this.map.tSpawn));
+      }
     }
 
     // retardement CT : un T se montre à un passage clé → incendiaire / flash / fumigène prévus pour ce passage
@@ -701,7 +900,7 @@ export class LiveMatch {
   /** Fin de manche sans pose alors que les T doivent gagner : tout le monde fonce sur le site. */
   private startRush() {
     this.rush = true;
-    this.startExecute();
+    this.startExecute(true);
     const site = this.target;
     for (const u of this.alive('T')) {
       if (u.task === 'pickup' || u.task === 'plant') continue;
@@ -808,6 +1007,7 @@ export class LiveMatch {
       const tgt = this.units[u.target];
       u.angle = turnToward(u.angle, Math.atan2(tgt.pos.y - u.pos.y, tgt.pos.x - u.pos.x), 14 * dt);
       if (u.react > 0) { u.react -= dt; continue; }
+      if (u.lostSight > 0) continue; // plus de ligne de vue : on ne tire pas à travers un mur
       u.cooldown -= dt;
       if (u.cooldown > 0) continue;
       u.cooldown = WEAPON[u.weapon].interval * (0.9 + this.rng() * 0.25);
@@ -872,7 +1072,7 @@ export class LiveMatch {
     for (const u of this.units) {
       if (!u.alive) continue;
       if (u.delay > 0) { u.delay -= dt; continue; }
-      const engaged = u.target >= 0 && u.react <= 0.05 && u.task !== 'pickup';
+      const engaged = u.target >= 0 && u.lostSight === 0 && u.react <= 0.05 && u.task !== 'pickup';
       const busy = u.task === 'plant' || u.task === 'defuse';
 
       // à l'arrêt : petits pas autour du poste
@@ -943,6 +1143,9 @@ export class LiveMatch {
     if (this.phase !== 'live') return;
     this.phase = 'ended';
     this.score[winTeam] += 1;
+    this.history.t.push(this.plan.t);
+    this.history.ct.push(this.plan.ct);
+    this.history.tLost = winTeam !== this.teamOf('T');
     const loser = (1 - winTeam) as 0 | 1;
     const bonus = Math.min(4, this.lossStreak[loser]);
     for (const u of this.units) {
