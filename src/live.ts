@@ -15,6 +15,14 @@ export type { Vec };
 
 const dist = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
 
+/** Tourne `a` vers `b` par le chemin le plus court, de `max` radians au plus. */
+export function turnToward(a: number, b: number, max: number): number {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return a + Math.max(-max, Math.min(max, d));
+}
+
 /* ---------- scénarios de manche ---------- */
 type EndType = 'elim' | 'bomb' | 'defuse';
 interface Script { pre: Side[]; plant: boolean; post: Side[]; end: EndType }
@@ -101,7 +109,13 @@ export interface Unit {
   pos: Vec;
   path: Vec[];
   speed: number;
+  /** vitesse actuelle (accélère et freine) */
+  v: number;
+  /** direction de marche et direction du regard (lissées) */
+  heading: number;
   angle: number;
+  /** secondes d'aveuglement restantes (effet visuel) */
+  flash: number;
   hold: Vec | null;
   wander: number;
   hp: number;
@@ -140,6 +154,8 @@ export class LiveMatch {
   bombLeft = 0;
   bombPos: Vec | null = null;
   bombSite: 'A' | 'B' = 'A';
+  /** index du T qui porte la bombe (-1 si personne) */
+  carrier = -1;
   events: LiveEvent[] = [];
   lastWinner: 0 | 1 | null = null;
 
@@ -169,7 +185,7 @@ export class LiveMatch {
     this.schedule = buildSchedule(finalScore[0], finalScore[1], rng);
     [...mine, ...opp].forEach((player, i) => {
       this.units.push({
-        idx: i, team: i < 5 ? 0 : 1, player, name: player.nickname, pos: { x: 0, y: 0 }, path: [], speed: 34, angle: 0,
+        idx: i, team: i < 5 ? 0 : 1, player, name: player.nickname, pos: { x: 0, y: 0 }, path: [], speed: 34, v: 0, heading: 0, angle: 0, flash: 0,
         hold: null, wander: 0, hp: 100, alive: true, kills: 0, deaths: 0, money: 800, site: null,
       });
     });
@@ -220,7 +236,9 @@ export class LiveMatch {
       u.site = null;
       u.pos = randomIn(this.map, side === 'T' ? this.map.tSpawn : this.map.ctSpawn, this.rng, 10);
       u.speed = this.runSpeed();
-      u.angle = side === 'T' ? -0.9 : 2.2;
+      u.angle = u.heading = side === 'T' ? -0.9 : 2.2;
+      u.v = 0;
+      u.flash = 0;
       if (pistol) u.money = 800;
       // achats : pistolet, full buy, demi-achat ou éco selon l'argent
       let spend = 0;
@@ -230,6 +248,8 @@ export class LiveMatch {
       u.money -= spend;
     }
     this.assignPlan();
+    const tUnits = this.units.filter((u) => this.sideOf(u.team) === 'T');
+    this.carrier = tUnits[Math.floor(this.rng() * tUnits.length)].idx;
     this.emit({ type: 'roundStart', round: this.round, half });
     if (this.round === 1) this.chatLine(5 + Math.floor(this.rng() * 5), 'glhf');
   }
@@ -299,35 +319,49 @@ export class LiveMatch {
   }
 
   private moveUnits(dt: number) {
+    const TURN = 9; // rad/s : rayon de virage d'environ 6 px, les coins sont arrondis
+    const ACCEL = 170; // px/s²
     for (const u of this.units) {
       if (!u.alive) continue;
-      let remaining = u.speed * dt;
-      if (u.path.length) {
-        while (remaining > 0 && u.path.length) {
-          const to = u.path[0];
-          const d = dist(u.pos, to);
-          if (d <= remaining) {
-            u.pos = { ...to };
-            u.path.shift();
-            remaining -= d;
-          } else {
-            u.angle = Math.atan2(to.y - u.pos.y, to.x - u.pos.x);
-            u.pos = { x: u.pos.x + ((to.x - u.pos.x) / d) * remaining, y: u.pos.y + ((to.y - u.pos.y) / d) * remaining };
-            remaining = 0;
-          }
-        }
-      } else if (u.hold && u !== this.actor) {
-        // à l'arrêt : petits pas autour du poste, regard sur l'ennemi le plus proche
+      u.flash = Math.max(0, u.flash - dt);
+
+      // à l'arrêt : petits pas autour du poste
+      if (!u.path.length && u.hold && u !== this.actor) {
         u.wander -= dt;
         if (u.wander <= 0) {
-          u.wander = 1.5 + this.rng() * 2.5;
+          u.wander = 2 + this.rng() * 3;
           u.path = [scatter(this.map, u.hold, 18, this.rng)];
-          u.speed = (12 + this.rng() * 6) * 1.5;
+          u.speed = (11 + this.rng() * 6) * 1.5;
         }
       }
-      if (!u.path.length || u.speed < 30) {
-        const foe = this.nearestEnemy(u);
-        if (foe && dist(u.pos, foe.pos) < 300) u.angle = Math.atan2(foe.pos.y - u.pos.y, foe.pos.x - u.pos.x);
+
+      // accélération / freinage
+      const moving = u.path.length > 0;
+      const goal = moving ? u.speed : 0;
+      u.v += Math.max(-ACCEL * 2 * dt, Math.min(ACCEL * dt, goal - u.v));
+
+      if (moving) {
+        const to = u.path[0];
+        const want = Math.atan2(to.y - u.pos.y, to.x - u.pos.x);
+        u.heading = turnToward(u.heading, want, TURN * dt);
+        const step = u.v * dt;
+        const d = dist(u.pos, to);
+        if (d <= Math.max(step, 9) && (u.path.length > 1 || d <= Math.max(step, 4))) {
+          if (u.path.length > 1) u.path.shift();
+          else { u.pos = { ...to }; u.path.shift(); }
+        } else {
+          u.pos = { x: u.pos.x + Math.cos(u.heading) * step, y: u.pos.y + Math.sin(u.heading) * step };
+        }
+      } else if (u.v > 0.5) {
+        u.pos = { x: u.pos.x + Math.cos(u.heading) * u.v * dt, y: u.pos.y + Math.sin(u.heading) * u.v * dt };
+      }
+
+      // regard : l'ennemi proche, sinon la direction de marche
+      const foe = this.nearestEnemy(u);
+      if (foe && dist(u.pos, foe.pos) < 300) {
+        u.angle = turnToward(u.angle, Math.atan2(foe.pos.y - u.pos.y, foe.pos.x - u.pos.x), 10 * dt);
+      } else if (u.v > 8) {
+        u.angle = turnToward(u.angle, u.heading, 6 * dt);
       }
     }
   }
@@ -415,7 +449,8 @@ export class LiveMatch {
     const tAlive = this.alive('T');
     if (!tAlive.length) return;
     const bombPos = { ...this.map.bomb[this.target] };
-    const planter = tAlive.reduce((a, b) => (dist(a.pos, bombPos) < dist(b.pos, bombPos) ? a : b));
+    const carrying = tAlive.find((u) => u.idx === this.carrier);
+    const planter = carrying ?? tAlive.reduce((a, b) => (dist(a.pos, bombPos) < dist(b.pos, bombPos) ? a : b));
     this.actor = planter;
     this.stage = 'planting';
     this.actionLeft = PLANT_TIME;
@@ -491,6 +526,10 @@ export class LiveMatch {
     k.kills += 1;
     k.money = Math.min(16000, k.money + 300);
     if (this.rng() < 0.45) k.hp = Math.max(4, k.hp - Math.round(10 + this.rng() * 55));
+    if (this.rng() < 0.3) {
+      const near = this.units.filter((x) => x.alive && dist(x.pos, v.pos) < 220);
+      if (near.length) near[Math.floor(this.rng() * near.length)].flash = 1.2 + this.rng() * 1.6;
+    }
     this.emit({ type: 'kill', killer: k.idx, victim: v.idx, from: { ...k.pos }, to: { ...v.pos } });
     if (this.rng() < 0.12) {
       const speaker = this.rng() < 0.5 ? v : k;

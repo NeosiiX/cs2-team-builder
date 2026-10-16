@@ -634,3 +634,6 @@ main { padding: 28px 32px 48px; max-width: 1440px; margin: 0 auto; }
   .ls-team { font-size: 0.95rem; max-width: 10ch; }
 }
 @media (prefers-reduced-motion: reduce) { .lm-banner, .lm-notice { transition: none; } .ls-clock.bomb { animation: none; } }
+
+.lp-row { cursor: pointer; border-radius: 8px; }
+.lp-row.active { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.75); background: rgba(255, 255, 255, 0.05); }

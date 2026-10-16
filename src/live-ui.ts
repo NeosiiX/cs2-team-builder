@@ -76,7 +76,7 @@ export function startLive(opts: LiveUIOptions) {
     </div>
     <footer class="live-ctrl">
       <button class="lc-btn" data-live="pause" aria-label="Pause">II</button>
-      <button class="lc-btn lc-speed" data-live="speed" aria-label="Vitesse">16×</button>
+      <button class="lc-btn lc-speed" data-live="speed" aria-label="Vitesse">8×</button>
       <button class="lc-btn" data-live="chat" aria-label="Afficher / masquer le chat">💬</button>
       <button class="lc-btn lc-skip" data-live="skip">Passer ▸▸</button>
     </footer>
@@ -102,7 +102,7 @@ export function startLive(opts: LiveUIOptions) {
   // cartes réduites : 200×300 affichées à l'échelle
   dialog.querySelectorAll<HTMLElement>('.lp-card .card').forEach((c) => c.classList.add('card-mini'));
 
-  let speed = SPEEDS[SPEEDS.length - 1];
+  let speed = 8;
   let paused = false;
   let showChat = true;
   let wait = 0;
@@ -112,11 +112,26 @@ export function startLive(opts: LiveUIOptions) {
   let noticeUntil = 0;
   let bannerTimer = 0;
   const shots: Shot[] = [];
+  const hpSeen = new Map<number, number>();
+  const hurtUntil = new Map<number, number>();
+  const fireUntil = new Map<number, number>();
+  const shotFlash = new Map<number, number>();
+  let activeIdx = -1;
+  const nearestFoe = (u: Unit) => {
+    let best: Unit | null = null;
+    let bd = Infinity;
+    for (const e of m.units) {
+      if (!e.alive || e.team === u.team) continue;
+      const d = Math.hypot(e.pos.x - u.pos.x, e.pos.y - u.pos.y);
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best ? { u: best, d: bd } : null;
+  };
   const feed: Line[] = [];
   const chat: Line[] = [];
   const img = new Image();
   img.src = m.map.image;
-  const U = 1.3; // taille des repères à l'écran, en pixels du radar
+  const U = 1.6; // taille des repères à l'écran, en pixels du radar
   let view = { s: 1, ox: 0, oy: 0, dpr: 1 };
 
   const unitSide = (u: Unit): Side => m.sideOf(u.team);
@@ -155,6 +170,7 @@ export function startLive(opts: LiveUIOptions) {
         break;
       case 'kill': {
         shots.push({ from: e.from, to: e.to, born: now });
+        for (const t of [0, 90, 180, 270]) window.setTimeout(() => shotFlash.set(e.killer, performance.now() + 60), t);
         const k = m.units[e.killer];
         const v = m.units[e.victim];
         feed.push({ html: `${nameHTML(k)} <i>▸</i> ${nameHTML(v)}`, born: now });
@@ -213,7 +229,8 @@ export function startLive(opts: LiveUIOptions) {
     });
     for (const u of m.units) {
       const row = rows.get(u.idx)!;
-      const key = `${u.hp}|${u.kills}|${u.deaths}|${u.money}|${u.alive}`;
+      const bomb = u.alive && u.idx === m.carrier && !m.bombPos;
+      const key = `${u.hp}|${u.kills}|${u.deaths}|${u.money}|${u.alive}|${bomb}`;
       if (row.dataset.k === key) continue;
       row.dataset.k = key;
       row.classList.toggle('dead', !u.alive);
@@ -222,7 +239,7 @@ export function startLive(opts: LiveUIOptions) {
       const bar = row.querySelector<HTMLElement>('.lp-bar div')!;
       bar.style.width = `${u.hp}%`;
       bar.classList.toggle('low', u.hp <= 35);
-      row.querySelector('.lp-money')!.textContent = `$${u.money}`;
+      row.querySelector('.lp-money')!.textContent = `$${u.money}${bomb ? ' 💣' : ''}`;
     }
     // lignes éphémères (fil des éliminations, chat)
     while (feed.length && now - feed[0].born > 5000) feed.shift();
@@ -255,38 +272,107 @@ export function startLive(opts: LiveUIOptions) {
       ctx.strokeStyle = '#0b0b0b'; ctx.lineWidth = 1.5 * U; ctx.strokeRect(b.x - 6 * U, b.y - 4 * U, 12 * U, 8 * U);
     }
 
-    const alive = m.units.filter((u) => u.alive);
+    // états visuels : dégâts reçus, tirs, aveuglement
+    for (const u of m.units) {
+      const prev = hpSeen.get(u.idx) ?? u.hp;
+      if (u.hp < prev) hurtUntil.set(u.idx, now + 600);
+      hpSeen.set(u.idx, u.hp);
+      if (u.alive && u.v < 20) {
+        const foe = nearestFoe(u);
+        if (foe && foe.d < 250 && Math.random() < 0.06) fireUntil.set(u.idx, now + 70);
+      }
+    }
+    const R = 8.5 * U;
+    const slotOf = (u: Unit) => (u.idx % 5) + 1;
+
+    // morts : petite croix
     for (const u of m.units) {
       if (u.alive) continue;
-      ctx.strokeStyle = 'rgba(190,190,190,0.55)';
-      ctx.lineWidth = 2.5 * U;
+      ctx.strokeStyle = unitSide(u) === 'CT' ? 'rgba(69,170,242,0.45)' : 'rgba(242,194,48,0.45)';
+      ctx.lineWidth = 2.6 * U;
+      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(u.pos.x - 5 * U, u.pos.y - 5 * U); ctx.lineTo(u.pos.x + 5 * U, u.pos.y + 5 * U);
       ctx.moveTo(u.pos.x + 5 * U, u.pos.y - 5 * U); ctx.lineTo(u.pos.x - 5 * U, u.pos.y + 5 * U);
       ctx.stroke();
     }
-    for (const u of alive) {
-      const col = color(u);
-      const g = ctx.createRadialGradient(u.pos.x, u.pos.y, 4 * U, u.pos.x, u.pos.y, 62 * U);
-      g.addColorStop(0, col + '55');
-      g.addColorStop(1, col + '00');
+
+    const alive = m.units.filter((u) => u.alive);
+    // champ de vision du joueur sélectionné
+    const sel = activeIdx >= 0 ? m.units[activeIdx] : null;
+    if (sel && sel.alive) {
+      const g = ctx.createRadialGradient(sel.pos.x, sel.pos.y, 4 * U, sel.pos.x, sel.pos.y, 70 * U);
+      g.addColorStop(0, 'rgba(255,255,255,0.22)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.moveTo(u.pos.x, u.pos.y);
-      ctx.arc(u.pos.x, u.pos.y, 62 * U, u.angle - 0.5, u.angle + 0.5);
+      ctx.moveTo(sel.pos.x, sel.pos.y);
+      ctx.arc(sel.pos.x, sel.pos.y, 70 * U, sel.angle - 0.55, sel.angle + 0.55);
       ctx.closePath();
       ctx.fill();
     }
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.font = `700 ${12 * U}px Barlow, "Segoe UI", sans-serif`;
+
+    // points des joueurs (forme en goutte pointée vers le regard)
+    const tip = R * 1.5;
+    const th = Math.acos(R / tip);
     for (const u of alive) {
-      const col = color(u);
-      ctx.fillStyle = col;
-      ctx.beginPath(); ctx.arc(u.pos.x, u.pos.y, 8 * U, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = (u.team === 0 ? 2.5 : 1.8) * U;
-      ctx.strokeStyle = u.team === 0 ? '#ffffff' : '#0b1220';
+      const side = unitSide(u);
+      const carrying = u.idx === m.carrier && !m.bombPos && side === 'T';
+      const base = carrying ? '#ff8a1f' : side === 'CT' ? '#45aaf2' : '#f2c230';
+      const light = carrying ? '#ffc58a' : side === 'CT' ? '#a9dcff' : '#ffeaa0';
+      const flashed = u.flash > 0;
+      ctx.save();
+      ctx.translate(u.pos.x, u.pos.y);
+      ctx.rotate(u.angle);
+
+      if ((hurtUntil.get(u.idx) ?? 0) > now) { // dégâts : trait rouge dans le dos
+        ctx.strokeStyle = '#e8453a';
+        ctx.lineWidth = 3 * U;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(0, 0, R + 3.5 * U, Math.PI - 0.85, Math.PI + 0.85);
+        ctx.stroke();
+      }
+      if ((fireUntil.get(u.idx) ?? 0) > now || (shotFlash.get(u.idx) ?? 0) > now) { // tir : chevrons gris
+        ctx.strokeStyle = 'rgba(214,220,232,0.95)';
+        ctx.lineWidth = 2.6 * U;
+        ctx.lineJoin = 'round';
+        for (const off of [0, 6 * U]) {
+          ctx.beginPath();
+          ctx.moveTo(tip + 2 * U + off, -4.5 * U); ctx.lineTo(tip + 9 * U + off, 0); ctx.lineTo(tip + 2 * U + off, 4.5 * U);
+          ctx.stroke();
+        }
+      }
+      if (flashed) { ctx.shadowColor = 'rgba(255,255,255,0.95)'; ctx.shadowBlur = 14 * U; }
+      ctx.beginPath();
+      ctx.moveTo(tip, 0);
+      ctx.lineTo(R * Math.cos(th), R * Math.sin(th));
+      ctx.arc(0, 0, R, th, -th, false);
+      ctx.closePath();
+      const g = ctx.createRadialGradient(-R * 0.3, -R * 0.35, 1, 0, 0, R * 1.4);
+      g.addColorStop(0, flashed ? '#ffffff' : light);
+      g.addColorStop(1, flashed ? light : base);
+      ctx.fillStyle = g;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 1.4 * U;
+      ctx.strokeStyle = 'rgba(8,12,22,0.7)';
       ctx.stroke();
+      if (u.idx === activeIdx) { // sélection : anneau
+        ctx.beginPath(); ctx.arc(0, 0, R + 4.5 * U, 0, Math.PI * 2);
+        ctx.lineWidth = 3 * U; ctx.strokeStyle = 'rgba(8,12,22,0.8)'; ctx.stroke();
+        ctx.lineWidth = 1.8 * U; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+      }
+      ctx.restore();
+
+      // numéro de slot, pseudo et barre de vie
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `800 ${9.5 * U}px Barlow, "Segoe UI", sans-serif`;
+      ctx.fillStyle = 'rgba(8,12,22,0.85)';
+      ctx.fillText(String(slotOf(u)), u.pos.x, u.pos.y + 0.5 * U);
+      ctx.textBaseline = 'alphabetic';
+      ctx.font = `700 ${12 * U}px Barlow, "Segoe UI", sans-serif`;
       ctx.lineWidth = 3 * U;
       ctx.strokeStyle = 'rgba(0,0,0,0.85)';
       ctx.strokeText(u.name, u.pos.x, u.pos.y - 19 * U);
@@ -294,7 +380,7 @@ export function startLive(opts: LiveUIOptions) {
       ctx.fillText(u.name, u.pos.x, u.pos.y - 19 * U);
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(u.pos.x - 13 * U, u.pos.y - 15 * U, 26 * U, 3 * U);
-      ctx.fillStyle = col;
+      ctx.fillStyle = base;
       ctx.fillRect(u.pos.x - 13 * U, u.pos.y - 15 * U, (26 * U * u.hp) / 100, 3 * U);
     }
     // tirs
@@ -338,7 +424,7 @@ export function startLive(opts: LiveUIOptions) {
       } else {
         let rem = dt * speed;
         while (rem > 0 && (m.phase === 'live' || m.phase === 'freeze')) {
-          const d = Math.min(0.25, rem);
+          const d = Math.min(0.05, rem);
           m.step(d);
           rem -= d;
         }
@@ -352,6 +438,13 @@ export function startLive(opts: LiveUIOptions) {
   }
 
   function onClick(e: MouseEvent) {
+    const row = (e.target as HTMLElement).closest<HTMLElement>('.lp-row');
+    if (row) {
+      const i = Number(row.dataset.i);
+      activeIdx = activeIdx === i ? -1 : i;
+      rows.forEach((r, k) => r.classList.toggle('active', k === activeIdx));
+      return;
+    }
     const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-live]');
     if (!btn) return;
     const act = btn.dataset.live;
