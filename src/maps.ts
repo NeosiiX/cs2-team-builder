@@ -11,6 +11,13 @@ export interface Rect { x: number; y: number; w: number; h: number }
 export type Rng = () => number;
 export type SiteId = 'A' | 'B';
 
+/** Lieu nommé (callout) et son étage : 1 = en hauteur / à l'étage, 0 = sol, -1 = en contrebas / souterrain. */
+export interface Place {
+  name: string;
+  level: -1 | 0 | 1;
+  r: Rect;
+}
+
 export interface MapDef {
   id: string;
   name: string;
@@ -28,7 +35,11 @@ export interface MapDef {
   routes: Record<SiteId, Vec[][]>;
   /** poste des CT au milieu de la carte */
   mid: Vec;
+  /** lieux nommés : le premier rectangle qui contient le point l'emporte (les petits d'abord) */
+  places: Place[];
 }
+
+const P = (name: string, level: -1 | 0 | 1, x: number, y: number, w: number, h: number): Place => ({ name, level, r: { x, y, w, h } });
 
 export const MAPS: MapDef[] = [
   {
@@ -49,6 +60,14 @@ export const MAPS: MapDef[] = [
       ],
     },
     mid: { x: 745, y: 430 },
+    places: [
+      P('Pit', -1, 1085, 100, 130, 92), P('Site A', 1, 960, 180, 180, 120), P('Goose', 1, 1140, 150, 75, 60),
+      P('Catwalk', 1, 790, 340, 175, 190), P('Spawn CT', 0, 855, 225, 115, 135),
+      P('Long A', 0, 1060, 290, 210, 260), P('Long doors', 0, 955, 545, 310, 240), P('Outside long', 0, 870, 760, 160, 360),
+      P('Tunnels bas', -1, 555, 465, 165, 65), P('Tunnels', 0, 330, 465, 270, 210),
+      P('Site B', 0, 340, 90, 200, 330), P('Portes B', 0, 530, 190, 120, 160), P('CT mid', 0, 640, 220, 160, 120),
+      P('Mid', 0, 660, 340, 135, 640), P('Spawn T', 0, 330, 660, 620, 460),
+    ],
   },
   {
     id: 'mirage', name: 'Mirage', image: '/maps/mirage.png', w: 1600, h: 1200,
@@ -68,6 +87,14 @@ export const MAPS: MapDef[] = [
       ],
     },
     mid: { x: 700, y: 560 },
+    places: [
+      P('Underpass', -1, 686, 300, 44, 190), P('Short', 1, 632, 390, 58, 300), P('Connector', 0, 745, 585, 90, 110),
+      P('Apparts', 1, 470, 165, 445, 145), P('Site B', 0, 295, 245, 290, 210), P('Market', 0, 360, 445, 225, 125),
+      P('Palais', 1, 940, 800, 280, 180), P('Ramp', 0, 860, 700, 210, 110), P('Rampe T', 0, 1060, 630, 230, 180),
+      P('Site A', 0, 740, 790, 200, 240), P('Jungle', 0, 600, 680, 160, 140), P('Spawn CT', 0, 440, 750, 160, 140),
+      P('Haut T', 0, 975, 160, 320, 150), P('Spawn T', 0, 1205, 300, 100, 200), P('Mid', 0, 680, 455, 400, 170),
+      P('Couloir B', 0, 520, 450, 120, 330),
+    ],
   },
   {
     id: 'inferno', name: 'Inferno', image: '/maps/inferno.png', w: 1600, h: 1200,
@@ -87,10 +114,27 @@ export const MAPS: MapDef[] = [
       ],
     },
     mid: { x: 950, y: 720 },
+    places: [
+      P('Pit', -1, 1150, 930, 155, 115), P('Site A', 0, 1035, 625, 230, 315), P('Library', 0, 1240, 770, 70, 280),
+      P('Balcon', 1, 905, 895, 240, 160), P('Apparts', 1, 545, 815, 215, 110), P('Apparts', 1, 386, 770, 120, 265),
+      P('Site B', 0, 685, 170, 180, 205), P('Construction', 0, 820, 95, 185, 140), P('Banana', 0, 655, 375, 285, 390),
+      P('Arch', 0, 1085, 510, 60, 130), P('Spawn CT', 0, 1055, 230, 260, 310), P('Spawn T', 0, 285, 700, 100, 260),
+      P('Mid', 0, 545, 700, 470, 300),
+    ],
   },
 ];
 
 export const mapById = (id: string): MapDef => MAPS.find((m) => m.id === id) ?? MAPS[0];
+
+const NOWHERE: Place = { name: '', level: 0, r: { x: 0, y: 0, w: 0, h: 0 } };
+/** Lieu (callout + étage) d'un point du radar. */
+export function placeAt(map: MapDef, p: Vec): Place {
+  for (const pl of map.places) {
+    const r = pl.r;
+    if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) return pl;
+  }
+  return NOWHERE;
+}
 
 /* ---------- grille des zones praticables ---------- */
 interface GridData {
@@ -98,6 +142,8 @@ interface GridData {
   cols: number;
   rows: number;
   bits: string;
+  /** cellules qu'on ne traverse que dans un sens (saut de corniche) : index → [dx, dy] */
+  oneway?: Record<string, [number, number]>;
   los: { scale: number; cols: number; rows: number; bits: string };
 }
 
@@ -128,6 +174,17 @@ export class Grid {
     this.wallCols = g.los.cols;
     this.wallRows = g.los.rows;
     this.wallScale = g.los.scale;
+    this.oneway = new Map(Object.entries(g.oneway ?? {}).map(([k, v]) => [Number(k), v]));
+  }
+  /** sens autorisé des cellules à sens unique */
+  oneway: Map<number, [number, number]>;
+  /** Peut-on passer de la cellule (c, r) à sa voisine en (dc, dr) ? (respecte les sauts à sens unique) */
+  canStep(c: number, r: number, dc: number, dr: number): boolean {
+    const a = this.oneway.get(r * this.cols + c);
+    const b = this.oneway.get((r + dr) * this.cols + c + dc);
+    if (a && dc * a[0] + dr * a[1] < 0) return false;
+    if (b && dc * b[0] + dr * b[1] < 0) return false;
+    return true;
   }
   /** Mur (ou caisse, ou fond) à cet endroit pour la vue ? */
   solid(x: number, y: number): boolean {
@@ -201,12 +258,18 @@ export class Grid {
     if (len < 1) return true;
     const nx = -(b.y - a.y) / len;
     const ny = (b.x - a.x) / len;
+    const ux = (b.x - a.x) / len;
+    const uy = (b.y - a.y) / len;
     const steps = Math.ceil(len / 4);
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       const x = a.x + (b.x - a.x) * t;
       const y = a.y + (b.y - a.y) * t;
       if (!this.walk({ x, y }) || !this.walk({ x: x + nx * 4, y: y + ny * 4 }) || !this.walk({ x: x - nx * 4, y: y - ny * 4 })) return false;
+      if (this.oneway.size) {
+        const ow = this.oneway.get(Math.floor(y / this.cell) * this.cols + Math.floor(x / this.cell));
+        if (ow && ux * ow[0] + uy * ow[1] < 0) return false; // pas de remontée de corniche
+      }
     }
     return true;
   }
@@ -312,6 +375,7 @@ export function findPath(map: MapDef, from: Vec, to: Vec): Vec[] {
         const nr = r + dr;
         if (!g.walkCell(nc, nr)) continue;
         if (dr && dc && (!g.walkCell(c + dc, r) || !g.walkCell(c, r + dr))) continue;
+        if (g.oneway.size && !g.canStep(c, r, dc, dr)) continue;
         const ni = nr * W + nc;
         const nCost = cost[cur] + (dr && dc ? SQRT2 : 1) + (g.nearWall(nc, nr) ? 1.2 : 0);
         if (nCost < cost[ni]) {

@@ -1,4 +1,5 @@
 import type { LiveMatch, Unit, Side, LiveEvent, Vec } from './live';
+import { placeAt } from './maps';
 import { FIRE_RADIUS } from './live';
 import type { Player } from './types';
 
@@ -39,6 +40,7 @@ export function startLive(opts: LiveUIOptions) {
       <div class="lp-card">${opts.cardHTML(u.player)}</div>
       <div class="lp-info">
         <div class="lp-name"><b>${esc(u.name)}</b><span class="lp-kd">0/0</span></div>
+        <div class="lp-place"></div>
         <div class="lp-hp"><span class="lp-hpn">+ 100</span><div class="lp-bar"><div></div></div></div>
         <div class="lp-money">$0</div>
       </div>
@@ -229,11 +231,14 @@ export function startLive(opts: LiveUIOptions) {
     for (const u of m.units) {
       const row = rows.get(u.idx)!;
       const bomb = u.alive && u.idx === m.carrier;
-      const key = `${Math.ceil(u.hp)}|${u.kills}|${u.deaths}|${u.money}|${u.alive}|${bomb}`;
+      const place = placeAt(m.map, u.pos);
+      const placeTxt = u.alive && place.name ? `${place.name}${place.level > 0 ? ' ▲' : place.level < 0 ? ' ▼' : ''}` : '';
+      const key = `${placeTxt}|${Math.ceil(u.hp)}|${u.kills}|${u.deaths}|${u.money}|${u.alive}|${bomb}`;
       if (row.dataset.k === key) continue;
       row.dataset.k = key;
       row.classList.toggle('dead', !u.alive);
       row.querySelector('.lp-kd')!.textContent = `${u.kills}/${u.deaths}`;
+      row.querySelector('.lp-place')!.textContent = placeTxt;
       row.querySelector('.lp-hpn')!.textContent = `+ ${Math.ceil(u.hp)}`;
       const bar = row.querySelector<HTMLElement>('.lp-bar div')!;
       bar.style.width = `${u.hp}%`;
@@ -428,6 +433,22 @@ export function startLive(opts: LiveUIOptions) {
         ctx.lineWidth = 1.8 * U; ctx.strokeStyle = '#ffffff'; ctx.stroke();
       }
       ctx.restore();
+
+      // étage : ▲ en hauteur, ▼ en contrebas (comme le radar CS sur les cartes à étages)
+      const lvl = placeAt(m.map, u.pos).level;
+      if (lvl) {
+        const bx = u.pos.x + R * 1.05;
+        const by = u.pos.y - R * 1.05;
+        ctx.beginPath();
+        if (lvl > 0) { ctx.moveTo(bx, by - 4 * U); ctx.lineTo(bx + 4 * U, by + 3 * U); ctx.lineTo(bx - 4 * U, by + 3 * U); }
+        else { ctx.moveTo(bx, by + 4 * U); ctx.lineTo(bx + 4 * U, by - 3 * U); ctx.lineTo(bx - 4 * U, by - 3 * U); }
+        ctx.closePath();
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.lineWidth = 1.2 * U;
+        ctx.strokeStyle = 'rgba(8,12,22,0.85)';
+        ctx.stroke();
+      }
 
       // numéro de slot, pseudo et barre de vie
       ctx.textAlign = 'center';
