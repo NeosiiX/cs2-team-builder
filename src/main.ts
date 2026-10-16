@@ -530,36 +530,63 @@ function currentChem() {
   return computeChemistry(teamPlayers());
 }
 
-function playButtonState(mode: ModeDef): { label: string; disabled: boolean } {
-  if (currentChem().filledStarters < 5) return { label: 'Équipe incomplète', disabled: true };
+type PlayStatus = 'open' | 'wait' | 'blocked';
+
+function playButtonState(mode: ModeDef): { disabled: boolean; status: PlayStatus; statusText: string } {
+  if (currentChem().filledStarters < 5) return { disabled: true, status: 'blocked', statusText: 'Équipe incomplète' };
   const left = cooldownLeft(mode, save.lastPlayed[mode.id]);
-  if (left > 0) return { label: `Disponible dans ${fmtCountdown(left)}`, disabled: true };
-  if (save.coins < mode.entry) return { label: `Il faut 🪙 ${mode.entry}`, disabled: true };
-  return { label: mode.entry ? `Jouer — 🪙 ${mode.entry}` : 'Jouer', disabled: false };
+  if (left > 0) return { disabled: true, status: 'wait', statusText: `Disponible dans ${fmtCountdown(left)}` };
+  if (save.coins < mode.entry) return { disabled: true, status: 'blocked', statusText: `Il faut ${mode.entry} 🪙` };
+  return { disabled: false, status: 'open', statusText: 'Ouvert' };
 }
 
-function modeCardHTML(mode: ModeDef, chem: ReturnType<typeof currentChem>): string {
+const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
+
+function modeRowHTML(mode: ModeDef, chem: ReturnType<typeof currentChem>): string {
   const state = playButtonState(mode);
   const ready = chem.filledStarters === 5;
+  const mine = save.history.filter((m) => m.mode === mode.id);
+  const wins = mine.filter((m) => m.won).length;
+  const today = mine.filter((m) => m.ts >= startOfToday()).length;
   const chance = ready ? `≈ ${Math.round(averageWinChance(mode, chem.teamOvr) * 100)} %` : '–';
+  const isScrim = mode.id === 'scrim';
+
+  const chips = [
+    `<span class="chip-info">Entrée <b>${mode.entry ? `${mode.entry} 🪙` : 'gratuite'}</b></span>`,
+    `<span class="chip-info prize">🪙 <b>${mode.win}</b> victoire</span>`,
+    mode.id === 'scrim' ? '' : `<span class="chip-info">🪙 <b>${mode.loss}</b> défaite</span>`,
+    `<span class="chip-info">Délai <b>${fmtCooldown(mode.cooldownMs)}</b></span>`,
+    `<span class="chip-info">Chance de victoire <b>${chance}</b></span>`,
+    `<span class="chip-info"><b>${today}</b> aujourd'hui</span>`,
+  ].join('');
+
   return `
-    <article class="panel mode" style="--accent:${mode.accent}">
-      <h3>${esc(mode.name)}</h3>
-      <p class="muted">${esc(mode.tagline)}</p>
-      <ul class="mode-rules">
-        <li><span>Victoire</span><b class="gain">+${mode.win} 🪙</b></li>
-        <li><span>Défaite</span><b>${mode.loss ? `+${mode.loss} 🪙` : '0'}</b></li>
-        <li><span>Ticket d'entrée</span><b>${mode.entry ? `${mode.entry} 🪙` : 'Gratuit'}</b></li>
-        <li><span>Délai entre deux matchs</span><b>${fmtCooldown(mode.cooldownMs)}</b></li>
-        <li><span>Chance de victoire</span><b>${chance}</b></li>
-      </ul>
-      <button class="btn btn-gold full" data-play="${mode.id}" ${state.disabled ? 'disabled' : ''}>${state.label}</button>
+    <article class="play-row mode-${mode.id} ${isScrim ? 'play-scrim' : 'play-stage'}" style="--accent:${mode.accent}">
+      <div class="hex"><div class="hex-in"><b>${mode.badge.big}</b>${mode.badge.small ? `<small>${mode.badge.small}</small>` : ''}</div></div>
+      <div class="play-body">
+        <div class="play-eyebrow">
+          <span>${esc(mode.eyebrow)}</span>
+          <span class="status-pill ${state.status}" data-status="${mode.id}">${esc(state.statusText)}</span>
+          ${wins ? `<span class="wins-pill">Victoires ×${wins}</span>` : ''}
+        </div>
+        <h3>${esc(mode.name)}</h3>
+        <p class="play-desc">${esc(mode.desc)}</p>
+        <div class="play-chips">${chips}</div>
+      </div>
+      <button class="play-cta" data-play="${mode.id}" ${state.disabled ? 'disabled' : ''}>
+        <span aria-hidden="true">▶</span> ${isScrim ? 'Lancer le scrim' : 'Entrer'}
+      </button>
     </article>`;
 }
 
 function renderPlay() {
   const chem = currentChem();
   const ready = chem.filledStarters === 5;
+  const row = (id: ModeId) => modeRowHTML(modeById(id), chem);
   view.innerHTML = `
     <div class="section-head">
       <h2>Play</h2>
@@ -567,15 +594,23 @@ function renderPlay() {
     </div>
     ${ready ? '' : `<div class="panel notice"><p>Place tes 5 joueurs dans My team pour pouvoir jouer. Le coach est facultatif.</p>
       <button class="btn btn-gold" data-goto="team">Composer mon équipe</button></div>`}
-    <div class="mode-grid">${MODES.map((m) => modeCardHTML(m, chem)).join('')}</div>`;
+    <div class="play">
+      ${row('scrim')}
+      <div class="stages">${row('showmatch')}${row('lan')}</div>
+    </div>`;
 }
 
-/** Met à jour uniquement les boutons (compte à rebours) sans reconstruire la page. */
+/** Met à jour uniquement les statuts et les boutons (compte à rebours) sans reconstruire la page. */
 function updatePlayButtons() {
   view.querySelectorAll<HTMLButtonElement>('[data-play]').forEach((btn) => {
-    const state = playButtonState(modeById(btn.dataset.play as ModeId));
-    if (btn.textContent !== state.label) btn.textContent = state.label;
+    const id = btn.dataset.play as ModeId;
+    const state = playButtonState(modeById(id));
     if (btn.disabled !== state.disabled) btn.disabled = state.disabled;
+    const pill = view.querySelector<HTMLElement>(`[data-status="${id}"]`);
+    if (pill) {
+      if (pill.textContent !== state.statusText) pill.textContent = state.statusText;
+      pill.className = `status-pill ${state.status}`;
+    }
   });
 }
 
@@ -656,7 +691,7 @@ function showMatchResult(mode: ModeDef, m: MatchRecord) {
     <ul class="match-rewards">${lines}</ul>
     <div class="dialog-actions">
       <button class="btn btn-ghost" data-close>Fermer</button>
-      <button class="btn btn-gold" data-replay="${mode.id}" ${state.disabled ? 'disabled' : ''}>${state.disabled ? state.label : 'Rejouer'}</button>
+      <button class="btn btn-gold" data-replay="${mode.id}" ${state.disabled ? 'disabled' : ''}>${state.disabled ? esc(state.statusText) : 'Rejouer'}</button>
     </div>`;
   render();
 }

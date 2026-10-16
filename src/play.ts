@@ -21,6 +21,10 @@ export interface ModeDef {
   /** niveau des adversaires : moyenne et écart-type de leur note */
   opp: { mean: number; sd: number };
   accent: string;
+  /** texte d'accroche, petit titre et badge hexagonal de la carte */
+  desc: string;
+  eyebrow: string;
+  badge: { big: string; small?: string };
 }
 
 const MIN = 60_000;
@@ -29,14 +33,20 @@ export const MODES: ModeDef[] = [
   {
     id: 'scrim', name: 'Scrim', tagline: 'Entraînement libre, aucune attente',
     cooldownMs: 0, entry: 0, win: 10, loss: 0, opp: { mean: 72, sd: 6 }, accent: '#4f8cff',
+    desc: 'Des matchs d’entraînement contre des équipes de ton niveau. Gratuit, sans attente\u00a0: gagne et empoche 10\u00a0🪙 à chaque victoire.',
+    eyebrow: 'Scrim · toujours ouvert', badge: { big: 'VS' },
   },
   {
     id: 'showmatch', name: 'Showmatch', tagline: 'Un match de démonstration toutes les 5 minutes',
     cooldownMs: 5 * MIN, entry: 0, win: 35, loss: 15, opp: { mean: 79, sd: 5 }, accent: '#e8a838',
+    desc: 'Un match de démonstration toutes les 5 minutes. Pas de ticket d’entrée, et tu gagnes des pièces même si tu perds.',
+    eyebrow: 'Étape 1', badge: { big: '1', small: 'SHOWMATCH' },
   },
   {
     id: 'lan', name: 'LAN Cup', tagline: 'Une finale toutes les 30 minutes, ticket d’entrée payant',
     cooldownMs: 30 * MIN, entry: 200, win: 400, loss: 0, opp: { mean: 87, sd: 4 }, accent: '#9b7bff',
+    desc: 'La grande finale, une fois toutes les 30 minutes. Ticket d’entrée de 200\u00a0🪙\u00a0: 400\u00a0🪙 si tu gagnes, rien si tu perds.',
+    eyebrow: 'Étape 2', badge: { big: '2', small: 'LAN' },
   },
 ];
 
