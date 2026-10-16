@@ -20,7 +20,7 @@ export interface LiveUIOptions {
 const SPEEDS = [1, 2, 4, 8, 16];
 const SIDE_COLOR: Record<Side, string> = { CT: '#5aa2ff', T: '#f0b13a' };
 const SIDE_LABEL: Record<Side, string> = { CT: 'COUNTER-TERRORISTS', T: 'TERRORISTS' };
-const REASON: Record<string, string> = { elim: 'équipe adverse éliminée', bomb: 'bombe explosée', defuse: 'bombe désamorcée' };
+const REASON: Record<string, string> = { elim: 'équipe adverse éliminée', bomb: 'bombe explosée', defuse: 'bombe désamorcée', time: 'temps écoulé' };
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const fmtClock = (s: number) => `${Math.floor(Math.ceil(s) / 60)}:${String(Math.ceil(s) % 60).padStart(2, '0')}`;
@@ -115,18 +115,9 @@ export function startLive(opts: LiveUIOptions) {
   const hpSeen = new Map<number, number>();
   const hurtUntil = new Map<number, number>();
   const fireUntil = new Map<number, number>();
-  const shotFlash = new Map<number, number>();
+  const shotSeen = new Map<number, number>();
+  const bullets: Shot[] = [];
   let activeIdx = -1;
-  const nearestFoe = (u: Unit) => {
-    let best: Unit | null = null;
-    let bd = Infinity;
-    for (const e of m.units) {
-      if (!e.alive || e.team === u.team) continue;
-      const d = Math.hypot(e.pos.x - u.pos.x, e.pos.y - u.pos.y);
-      if (d < bd) { bd = d; best = e; }
-    }
-    return best ? { u: best, d: bd } : null;
-  };
   const feed: Line[] = [];
   const chat: Line[] = [];
   const img = new Image();
@@ -170,10 +161,9 @@ export function startLive(opts: LiveUIOptions) {
         break;
       case 'kill': {
         shots.push({ from: e.from, to: e.to, born: now });
-        for (const t of [0, 90, 180, 270]) window.setTimeout(() => shotFlash.set(e.killer, performance.now() + 60), t);
         const k = m.units[e.killer];
         const v = m.units[e.victim];
-        feed.push({ html: `${nameHTML(k)} <i>▸</i> ${nameHTML(v)}`, born: now });
+        feed.push({ html: `${nameHTML(k)} <i>${e.hs ? '⌖' : '▸'}</i> ${nameHTML(v)}`, born: now });
         break;
       }
       case 'plant': notice(`Bombe plantée sur le site ${e.site}`); break;
@@ -229,7 +219,7 @@ export function startLive(opts: LiveUIOptions) {
     });
     for (const u of m.units) {
       const row = rows.get(u.idx)!;
-      const bomb = u.alive && u.idx === m.carrier && !m.bombPos;
+      const bomb = u.alive && u.idx === m.carrier;
       const key = `${u.hp}|${u.kills}|${u.deaths}|${u.money}|${u.alive}|${bomb}`;
       if (row.dataset.k === key) continue;
       row.dataset.k = key;
@@ -262,12 +252,15 @@ export function startLive(opts: LiveUIOptions) {
     ctx.setTransform(view.s, 0, 0, view.s, view.ox - v.x * view.s, view.oy - v.y * view.s);
 
     // bombe
-    if (m.bombPos && (m.stage !== 'ended' || m.phase !== 'freeze')) {
+    if (m.bombPos) {
       const b = m.bombPos;
-      const pulse = 0.5 + 0.5 * Math.sin(now / 160);
-      ctx.fillStyle = `rgba(255,70,60,${0.12 + 0.2 * pulse})`;
-      ctx.beginPath(); ctx.arc(b.x, b.y, (14 + 8 * pulse) * U, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = m.stage === 'defusing' ? '#6cb7ff' : '#ff4a3d';
+      const planted = m.bomb.state === 'planted';
+      if (planted) {
+        const pulse = 0.5 + 0.5 * Math.sin(now / 160);
+        ctx.fillStyle = `rgba(255,70,60,${0.12 + 0.2 * pulse})`;
+        ctx.beginPath(); ctx.arc(b.x, b.y, (14 + 8 * pulse) * U, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = !planted ? '#ff8a1f' : m.defusing ? '#6cb7ff' : '#ff4a3d';
       ctx.fillRect(b.x - 6 * U, b.y - 4 * U, 12 * U, 8 * U);
       ctx.strokeStyle = '#0b0b0b'; ctx.lineWidth = 1.5 * U; ctx.strokeRect(b.x - 6 * U, b.y - 4 * U, 12 * U, 8 * U);
     }
@@ -277,9 +270,14 @@ export function startLive(opts: LiveUIOptions) {
       const prev = hpSeen.get(u.idx) ?? u.hp;
       if (u.hp < prev) hurtUntil.set(u.idx, now + 600);
       hpSeen.set(u.idx, u.hp);
-      if (u.alive && u.v < 20) {
-        const foe = nearestFoe(u);
-        if (foe && foe.d < 250 && Math.random() < 0.06) fireUntil.set(u.idx, now + 70);
+      // nouvelle balle tirée : flash de bouche + traçante vers la cible
+      if (u.lastShot !== (shotSeen.get(u.idx) ?? -99)) {
+        shotSeen.set(u.idx, u.lastShot);
+        if (u.alive && u.lastShot > 0) {
+          fireUntil.set(u.idx, now + 70);
+          const tg = u.target >= 0 ? m.units[u.target] : null;
+          if (tg) bullets.push({ from: { ...u.pos }, to: { x: tg.pos.x + (Math.random() - 0.5) * 10, y: tg.pos.y + (Math.random() - 0.5) * 10 }, born: now });
+        }
       }
     }
     const R = 8.5 * U;
@@ -317,7 +315,7 @@ export function startLive(opts: LiveUIOptions) {
     const th = Math.acos(R / tip);
     for (const u of alive) {
       const side = unitSide(u);
-      const carrying = u.idx === m.carrier && !m.bombPos && side === 'T';
+      const carrying = u.idx === m.carrier;
       const base = carrying ? '#ff8a1f' : side === 'CT' ? '#45aaf2' : '#f2c230';
       const light = carrying ? '#ffc58a' : side === 'CT' ? '#a9dcff' : '#ffeaa0';
       const flashed = u.flash > 0;
@@ -333,7 +331,7 @@ export function startLive(opts: LiveUIOptions) {
         ctx.arc(0, 0, R + 3.5 * U, Math.PI - 0.85, Math.PI + 0.85);
         ctx.stroke();
       }
-      if ((fireUntil.get(u.idx) ?? 0) > now || (shotFlash.get(u.idx) ?? 0) > now) { // tir : chevrons gris
+      if ((fireUntil.get(u.idx) ?? 0) > now) { // tir : chevrons gris
         ctx.strokeStyle = 'rgba(214,220,232,0.95)';
         ctx.lineWidth = 2.6 * U;
         ctx.lineJoin = 'round';
@@ -383,15 +381,30 @@ export function startLive(opts: LiveUIOptions) {
       ctx.fillStyle = base;
       ctx.fillRect(u.pos.x - 13 * U, u.pos.y - 15 * U, (26 * U * u.hp) / 100, 3 * U);
     }
-    // tirs
+    // traçantes (une par balle)
+    ctx.lineCap = 'round';
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      const age = now - bullets[i].born;
+      if (age > 110) { bullets.splice(i, 1); continue; }
+      const b = bullets[i];
+      const a = 1 - age / 110;
+      const dx = b.to.x - b.from.x;
+      const dy = b.to.y - b.from.y;
+      const head = Math.min(1, 0.35 + age / 70);
+      const tail = Math.max(0, head - 0.45);
+      ctx.strokeStyle = `rgba(255,232,150,${0.85 * a})`;
+      ctx.lineWidth = 1.4 * U;
+      ctx.beginPath();
+      ctx.moveTo(b.from.x + dx * tail, b.from.y + dy * tail);
+      ctx.lineTo(b.from.x + dx * head, b.from.y + dy * head);
+      ctx.stroke();
+    }
+    // impacts mortels
     for (let i = shots.length - 1; i >= 0; i--) {
       const age = now - shots[i].born;
       if (age > 320) { shots.splice(i, 1); continue; }
       const a = 1 - age / 320;
       const s = shots[i];
-      ctx.strokeStyle = `rgba(255,236,150,${a})`;
-      ctx.lineWidth = 2 * U;
-      ctx.beginPath(); ctx.moveTo(s.from.x, s.from.y); ctx.lineTo(s.to.x, s.to.y); ctx.stroke();
       ctx.fillStyle = `rgba(255,90,70,${a * 0.7})`;
       ctx.beginPath(); ctx.arc(s.to.x, s.to.y, (6 + 14 * (1 - a)) * U, 0, Math.PI * 2); ctx.fill();
     }

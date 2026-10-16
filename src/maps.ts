@@ -153,6 +153,16 @@ export class Grid {
   center(c: number, r: number): Vec {
     return { x: (c + 0.5) * this.cell, y: (r + 0.5) * this.cell };
   }
+  /** Ligne de vue : aucun mur ni caisse entre a et b. */
+  los(a: Vec, b: Vec): boolean {
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const steps = Math.ceil(len / 5);
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      if (!this.walk({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })) return false;
+    }
+    return true;
+  }
   /** Le segment a→b reste-t-il en zone praticable (avec une petite marge de chaque côté) ? */
   clear(a: Vec, b: Vec): boolean {
     const len = Math.hypot(b.x - a.x, b.y - a.y);

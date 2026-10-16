@@ -1,12 +1,19 @@
 import type { Player, Role } from './types';
 import type { MapDef, Vec } from './maps';
-import { findPath, randomIn, scatter, rectCenter, pathLength } from './maps';
+import { findPath, randomIn, scatter, rectCenter, gridOf } from './maps';
 
 /**
  * Moteur du match en direct (sans DOM).
- * Le résultat final (score) est décidé avant le match par play.ts ; ici on « raconte » ce match :
- * un vainqueur est tiré pour chaque manche (le total retombe toujours sur le score décidé), puis la manche est
- * jouée visuellement : déplacements sur la carte, duels, plantage / désamorçage de la bombe, économie.
+ *
+ * Le score final est décidé avant le match (play.ts). Ici, chaque manche se joue « pour de vrai » sur le radar :
+ * les joueurs se déplacent, se repèrent quand ils ont une ligne de vue (murs et caisses bloquent la vue),
+ * s'arrêtent et tirent balle par balle (précision selon AIM, distance, arme, déplacement), plantent et désamorcent.
+ *
+ * Pour que la manche finisse quand même du côté prévu, quelques règles discrètes s'appliquent :
+ * - le dernier survivant de l'équipe qui doit gagner ne peut pas tomber (il finit à 1 PV au pire) ;
+ * - si les T doivent gagner : les CT ne peuvent pas désamorcer tant qu'un T est en vie, et les T foncent planter
+ *   en fin de manche (le chrono attend la pose) ;
+ * - si les CT doivent gagner : le compte à rebours de la bombe attend le désamorçage.
  */
 
 export type Side = 'CT' | 'T';
@@ -22,10 +29,7 @@ export function turnToward(a: number, b: number, max: number): number {
   if (d < -Math.PI) d += Math.PI * 2;
   return a + Math.max(-max, Math.min(max, d));
 }
-
-/* ---------- scénarios de manche ---------- */
-type EndType = 'elim' | 'bomb' | 'defuse';
-interface Script { pre: Side[]; plant: boolean; post: Side[]; end: EndType }
+const angleDiff = (a: number, b: number) => Math.abs(turnToward(a, b, Infinity) - a);
 
 function shuffle<T>(a: T[], rng: Rng): T[] {
   for (let i = a.length - 1; i > 0; i--) {
@@ -42,34 +46,6 @@ function weighted(w: number[], rng: Rng): number {
   let x = rng() * t;
   for (let i = 0; i < w.length; i++) { x -= w[i]; if (x < 0) return i; }
   return w.length - 1;
-}
-
-/** Qui meurt, dans quel ordre, et comment la manche se termine, pour que `winner` gagne. */
-export function makeScript(winner: Side, rng: Rng): Script {
-  const r = rng();
-  if (winner === 'T') {
-    if (r < 0.55) {
-      const d = weighted([30, 30, 22, 12, 6], rng);
-      const t = shuffle([...rep<Side>('CT', 4), ...rep<Side>('T', d)], rng);
-      return { pre: [...t, 'CT'], plant: false, post: [], end: 'elim' };
-    }
-    const c = 1 + weighted([20, 35, 30, 15], rng);
-    const d = weighted([35, 35, 20, 10], rng);
-    return { pre: shuffle([...rep<Side>('CT', c), ...rep<Side>('T', d)], rng), plant: true, post: [], end: 'bomb' };
-  }
-  if (r < 0.6) {
-    const c = weighted([20, 30, 28, 14, 8], rng);
-    const t = shuffle([...rep<Side>('T', 4), ...rep<Side>('CT', c)], rng);
-    return { pre: [...t, 'T'], plant: false, post: [], end: 'elim' };
-  }
-  const c = 1 + weighted([40, 40, 20], rng);
-  const t1 = weighted([40, 40, 20], rng);
-  return {
-    pre: shuffle([...rep<Side>('CT', c), ...rep<Side>('T', t1)], rng),
-    plant: true,
-    post: rep<Side>('T', 5 - t1),
-    end: 'defuse',
-  };
 }
 
 /** Vainqueur de chaque manche (0 = ton équipe, 1 = adversaire) ; le total retombe sur le score décidé. */
@@ -100,7 +76,18 @@ export function buildOpponentRoster(all: Player[], mine: Player[], target: numbe
   return out;
 }
 
+/* ---------- armes ---------- */
+export type Weapon = 'pistol' | 'smg' | 'rifle' | 'awp';
+const WEAPON: Record<Weapon, { interval: number; acc: number; range: number; body: [number, number]; hs: number; reward: number }> = {
+  pistol: { interval: 0.26, acc: 0.85, range: 700, body: [14, 24], hs: 92, reward: 300 },
+  smg: { interval: 0.1, acc: 0.82, range: 650, body: [15, 24], hs: 70, reward: 600 },
+  rifle: { interval: 0.13, acc: 1, range: 1100, body: [23, 33], hs: 100, reward: 300 },
+  awp: { interval: 1.45, acc: 1.12, range: 1600, body: [100, 100], hs: 100, reward: 100 },
+};
+
 /* ---------- le match ---------- */
+type Task = 'move' | 'hold' | 'plant' | 'defuse' | 'pickup' | 'retake' | 'hunt';
+
 export interface Unit {
   idx: number;
   team: 0 | 1;
@@ -114,67 +101,80 @@ export interface Unit {
   /** direction de marche et direction du regard (lissées) */
   heading: number;
   angle: number;
-  /** secondes d'aveuglement restantes (effet visuel) */
+  /** direction surveillée à l'arrêt (vers l'entrée la plus probable de l'ennemi) */
+  watch: number;
+  /** secondes d'aveuglement restantes */
   flash: number;
   hold: Vec | null;
   wander: number;
+  delay: number;
   hp: number;
   alive: boolean;
   kills: number;
   deaths: number;
   money: number;
+  weapon: Weapon;
   site: 'A' | 'B' | 'M' | null;
+  task: Task;
+  /** progression de la pose / du désamorçage (secondes restantes) */
+  action: number;
+  /** combat : cible (-1 = aucune), temps de réaction restant, délai avant la balle suivante, dernière balle tirée */
+  target: number;
+  react: number;
+  cooldown: number;
+  lostSight: number;
+  lastShot: number;
+  replan: number;
 }
 
+export type EndReason = 'elim' | 'bomb' | 'defuse' | 'time';
 export type LiveEvent =
   | { type: 'roundStart'; round: number; half?: boolean }
-  | { type: 'kill'; killer: number; victim: number; from: Vec; to: Vec }
+  | { type: 'kill'; killer: number; victim: number; from: Vec; to: Vec; hs: boolean }
   | { type: 'plant'; site: 'A' | 'B' }
   | { type: 'defuse' }
-  | { type: 'roundEnd'; round: number; winTeam: 0 | 1; reason: EndType }
+  | { type: 'roundEnd'; round: number; winTeam: 0 | 1; reason: EndReason }
   | { type: 'chat'; from: number; text: string }
   | { type: 'matchEnd' };
 
-type Stage = 'approach' | 'planting' | 'planted' | 'defusing' | 'ended';
+export interface BombState {
+  state: 'carried' | 'dropped' | 'planted' | 'defused' | 'exploded';
+  pos: Vec | null;
+  carrier: number;
+  site: 'A' | 'B' | null;
+  timer: number;
+}
 
 const FREEZE = 4;
 const ROUND_TIME = 115;
 const BOMB_TIME = 40;
 const PLANT_TIME = 3.2;
-const DEFUSE_TIME = 4;
+const DEFUSE_TIME = 5;
+const FOV = 1.95; // demi-angle de vision (rad)
+const HEAR = 140; // en dessous, on « entend » l'ennemi même hors champ
+const RUN = 50; // vitesse de course (px radar / s)
 
 export class LiveMatch {
   units: Unit[] = [];
   score: [number, number] = [0, 0];
   round = 0;
   phase: 'freeze' | 'live' | 'ended' | 'over' = 'freeze';
-  stage: Stage = 'approach';
   t = 0;
   freezeLeft = FREEZE;
-  bombLeft = 0;
-  bombPos: Vec | null = null;
-  bombSite: 'A' | 'B' = 'A';
-  /** index du T qui porte la bombe (-1 si personne) */
-  carrier = -1;
   events: LiveEvent[] = [];
-  lastWinner: 0 | 1 | null = null;
-
-  private schedule: (0 | 1)[];
-  private script!: Script;
-  private queue: Side[] = [];
-  private nextAt = 0;
-  private target: 'A' | 'B' = 'A';
-  private rotateAt = 0;
-  private rotated = false;
-  private actionLeft = 0;
-  private actor: Unit | null = null;
-  private lossStreak: [number, number] = [0, 0];
+  bomb: BombState = { state: 'carried', pos: null, carrier: -1, site: null, timer: 0 };
 
   readonly mine: Player[];
   readonly opp: Player[];
   readonly finalScore: [number, number];
   readonly map: MapDef;
   private rng: Rng;
+  private schedule: (0 | 1)[];
+  private target: 'A' | 'B' = 'A';
+  private rotated = false;
+  private rush = false;
+  private lossStreak: [number, number] = [0, 0];
+  private aiClock = 0;
 
   constructor(mine: Player[], opp: Player[], finalScore: [number, number], map: MapDef, rng: Rng = Math.random) {
     this.map = map;
@@ -185,88 +185,97 @@ export class LiveMatch {
     this.schedule = buildSchedule(finalScore[0], finalScore[1], rng);
     [...mine, ...opp].forEach((player, i) => {
       this.units.push({
-        idx: i, team: i < 5 ? 0 : 1, player, name: player.nickname, pos: { x: 0, y: 0 }, path: [], speed: 34, v: 0, heading: 0, angle: 0, flash: 0,
-        hold: null, wander: 0, hp: 100, alive: true, kills: 0, deaths: 0, money: 800, site: null,
+        idx: i, team: i < 5 ? 0 : 1, player, name: player.nickname, pos: { x: 0, y: 0 }, path: [], speed: RUN, v: 0,
+        heading: 0, angle: 0, watch: 0, flash: 0, hold: null, wander: 0, delay: 0, hp: 100, alive: true, kills: 0, deaths: 0,
+        money: 800, weapon: 'pistol', site: null, task: 'move', action: 0, target: -1, react: 0, cooldown: 0, lostSight: 0,
+        lastShot: -99, replan: 0,
       });
     });
     this.startRound();
   }
 
+  /* ---------- infos pour l'affichage ---------- */
   get totalRounds(): number { return this.schedule.length; }
-  /** Côté d'une équipe pendant la manche en cours (changement de côté après la 12e manche). */
+  /** Côté d'une équipe (changement de côté après la 12e manche). */
   sideOf(team: 0 | 1, round = this.round): Side {
-    const first = round <= 12;
-    return (team === 0) === first ? 'CT' : 'T';
+    return (team === 0) === round <= 12 ? 'CT' : 'T';
   }
   alive(side: Side): Unit[] { return this.units.filter((u) => u.alive && this.sideOf(u.team) === side); }
-  /** Temps affiché (secondes) : fin de manche ou compte à rebours de la bombe une fois plantée. */
-  get clock(): number {
-    if (this.stage === 'planted' || this.stage === 'defusing') return Math.max(0, this.bombLeft);
-    return Math.max(0, ROUND_TIME - this.t);
-  }
-  get bombActive(): boolean { return this.stage === 'planted' || this.stage === 'defusing'; }
+  get planted(): boolean { return this.bomb.state === 'planted'; }
+  get bombActive(): boolean { return this.planted; }
+  /** Temps affiché : fin de manche, ou compte à rebours de la bombe une fois plantée. */
+  get clock(): number { return this.planted ? Math.max(0, this.bomb.timer) : Math.max(0, ROUND_TIME - this.t); }
+  /** Position de la bombe quand elle est au sol (lâchée ou plantée). */
+  get bombPos(): Vec | null { return this.bomb.state === 'dropped' || this.planted ? this.bomb.pos : null; }
+  get carrier(): number { return this.bomb.state === 'carried' ? this.bomb.carrier : -1; }
+  get defusing(): boolean { return this.units.some((u) => u.alive && u.task === 'defuse'); }
+
+  private get winTeam(): 0 | 1 { return this.schedule[this.round - 1]; }
+  private get winSide(): Side { return this.sideOf(this.winTeam); }
+  private teamOf(side: Side): 0 | 1 { return this.sideOf(0) === side ? 0 : 1; }
+  private aliveIn(team: 0 | 1): number { return this.units.filter((x) => x.alive && x.team === team).length; }
+  /** Dernier survivant de l'équipe qui doit gagner la manche : il ne peut pas tomber. */
+  private isProtected(u: Unit): boolean { return u.team === this.winTeam && this.aliveIn(u.team) === 1; }
 
   private emit(e: LiveEvent) { this.events.push(e); }
+  private chat(from: number, text: string) { this.emit({ type: 'chat', from, text }); }
+  private pathTo(from: Vec, to: Vec): Vec[] { return findPath(this.map, from, to); }
+  private runSpeed(): number { return RUN * (0.95 + this.rng() * 0.12); }
 
+  /** Direction à surveiller depuis `p` : le début du chemin vers `from` (là d'où viendra l'ennemi). */
+  private watchFrom(p: Vec, from: Vec): number {
+    const path = this.pathTo(p, from);
+    const q = path.find((x) => dist(x, p) > 30) ?? path[0] ?? from;
+    return Math.atan2(q.y - p.y, q.x - p.x);
+  }
+
+  /* ---------- début de manche ---------- */
   private startRound() {
     this.round += 1;
     const half = this.round === 13;
     const pistol = this.round === 1 || half;
     if (half) this.lossStreak = [0, 0];
-    this.script = makeScript(this.sideOf(this.schedule[this.round - 1]), this.rng);
-    this.queue = [...this.script.pre];
-    this.stage = 'approach';
     this.phase = 'freeze';
     this.freezeLeft = FREEZE;
     this.t = 0;
-    this.bombPos = null;
-    this.bombLeft = 0;
-    this.actor = null;
     this.rotated = false;
-    this.nextAt = 0;
+    this.rush = false;
+    this.aiClock = 0;
     this.target = this.rng() < 0.5 ? 'A' : 'B';
 
     for (const u of this.units) {
       const side = this.sideOf(u.team);
-      u.alive = true;
-      u.hp = 100;
-      u.path = [];
-      u.hold = null;
-      u.wander = 1 + this.rng() * 2;
-      u.site = null;
+      Object.assign(u, {
+        alive: true, hp: 100, path: [], hold: null, site: null, task: 'move', action: 0, target: -1, react: 0,
+        cooldown: 0, lostSight: 0, lastShot: -99, flash: 0, v: 0, replan: 0,
+        wander: 1 + this.rng() * 2, delay: side === 'T' ? this.rng() * 3 : this.rng() * 0.8,
+      });
       u.pos = randomIn(this.map, side === 'T' ? this.map.tSpawn : this.map.ctSpawn, this.rng, 10);
       u.speed = this.runSpeed();
-      u.angle = u.heading = side === 'T' ? -0.9 : 2.2;
-      u.v = 0;
-      u.flash = 0;
       if (pistol) u.money = 800;
-      // achats : pistolet, full buy, demi-achat ou éco selon l'argent
+      // achats : pistolet, AWP / fusil, SMG ou éco
       let spend = 0;
-      if (pistol) spend = 650;
-      else if (u.money >= 4700) spend = 4100 + Math.round(this.rng() * 3) * 100;
-      else if (u.money >= 2500) spend = Math.round((u.money * 0.7) / 50) * 50;
+      if (pistol) { spend = 650; u.weapon = 'pistol'; }
+      else if (u.money >= 4700) { spend = 4100 + Math.round(this.rng() * 3) * 100; u.weapon = u.player.role === 'AWP' ? 'awp' : 'rifle'; }
+      else if (u.money >= 2400) { spend = Math.round((u.money * 0.7) / 50) * 50; u.weapon = 'smg'; }
+      else { spend = Math.min(u.money, 200); u.weapon = 'pistol'; }
       u.money -= spend;
     }
     this.assignPlan();
-    const tUnits = this.units.filter((u) => this.sideOf(u.team) === 'T');
-    this.carrier = tUnits[Math.floor(this.rng() * tUnits.length)].idx;
+    const ts = this.units.filter((u) => this.sideOf(u.team) === 'T');
+    const carrier = ts[Math.floor(this.rng() * ts.length)];
+    this.bomb = { state: 'carried', pos: null, carrier: carrier.idx, site: null, timer: 0 };
     this.emit({ type: 'roundStart', round: this.round, half });
-    if (this.round === 1) this.chatLine(5 + Math.floor(this.rng() * 5), 'glhf');
+    if (this.round === 1) this.chat(5 + Math.floor(this.rng() * 5), 'glhf');
   }
 
-  private runSpeed(): number {
-    return (33 + this.rng() * 5) * 1.5;
-  }
-
-  private pathTo(from: Vec, to: Vec): Vec[] {
-    return findPath(this.map, from, to);
-  }
-
-  /** Les T prennent leurs routes vers le site visé, les CT se répartissent. */
+  /** Les T prennent leurs routes vers le site visé, les CT se répartissent sur A, B et le milieu. */
   private assignPlan() {
     const site = this.target;
     const ts = this.units.filter((u) => this.sideOf(u.team) === 'T');
     const cts = this.units.filter((u) => this.sideOf(u.team) === 'CT');
+    const tSpawn = rectCenter(this.map.tSpawn);
+    const ctSpawn = rectCenter(this.map.ctSpawn);
     const primary = this.rng() < 0.5 ? 0 : 1;
     shuffle(ts, this.rng).forEach((u, i) => {
       const via = this.map.routes[site][i < 3 ? primary : 1 - primary];
@@ -280,13 +289,9 @@ export class LiveMatch {
       u.path = pts;
       u.hold = end;
       u.site = site;
+      u.watch = this.watchFrom(end, ctSpawn);
+      u.angle = u.heading = Math.atan2((pts[0]?.y ?? end.y) - u.pos.y, (pts[0]?.x ?? end.x) - u.pos.x);
     });
-    let longest = 0;
-    for (const u of ts) longest = Math.max(longest, pathLength(u.path, u.pos) / u.speed);
-    this.rotateAt = Math.max(2, longest - 9);
-    this.nextAt = Math.max(5, longest - 2 + this.rng() * 3);
-
-    // CT : 2 en A, 2 en B, 1 au milieu
     const spots: ('A' | 'A' | 'B' | 'B' | 'M')[] = ['A', 'A', 'B', 'B', 'M'];
     shuffle(cts, this.rng).forEach((u, i) => {
       const s = spots[i];
@@ -294,14 +299,12 @@ export class LiveMatch {
       const hold = s === 'M' ? scatter(this.map, this.map.mid, 22, this.rng) : randomIn(this.map, this.map.sites[s], this.rng, 6);
       u.path = this.pathTo(u.pos, hold);
       u.hold = hold;
+      u.watch = this.watchFrom(hold, tSpawn);
+      u.angle = u.heading = Math.atan2((u.path[0]?.y ?? hold.y) - u.pos.y, (u.path[0]?.x ?? hold.x) - u.pos.x);
     });
   }
 
-  private chatLine(from: number, text: string) {
-    this.emit({ type: 'chat', from, text });
-  }
-
-  /** Avance la simulation de `dt` secondes de jeu. */
+  /* ---------- boucle ---------- */
   step(dt: number) {
     if (this.phase === 'over' || this.phase === 'ended') return;
     if (this.phase === 'freeze') {
@@ -310,259 +313,389 @@ export class LiveMatch {
       return;
     }
     this.t += dt;
-    if (this.stage === 'planted' || this.stage === 'defusing') {
-      this.bombLeft -= dt;
-      if (this.script.end === 'defuse') this.bombLeft = Math.max(this.bombLeft, 5.2);
+
+    if (this.planted) {
+      this.bomb.timer -= dt;
+      if (this.winSide === 'CT') this.bomb.timer = Math.max(this.bomb.timer, 6);
+      if (this.bomb.timer <= 0) {
+        this.bomb.state = 'exploded';
+        return this.endRound(this.teamOf('T'), 'bomb');
+      }
+    } else if (this.t >= ROUND_TIME) {
+      if (this.winSide === 'CT') return this.endRound(this.teamOf('CT'), 'time');
+      this.t = ROUND_TIME - 0.01; // les T doivent encore poser : le chrono attend
     }
-    this.moveUnits(dt);
-    this.runScript(dt);
+    if (!this.rush && !this.planted && this.winSide === 'T' && ROUND_TIME - this.t < 35) this.startRush();
+
+    this.aiClock -= dt;
+    if (this.aiClock <= 0) {
+      this.aiClock = 0.25;
+      this.think();
+    }
+    this.combat(dt);
+    if (this.phase !== 'live') return;
+    this.actions(dt);
+    if (this.phase !== 'live') return;
+    this.move(dt);
   }
 
-  private moveUnits(dt: number) {
-    const TURN = 9; // rad/s : rayon de virage d'environ 6 px, les coins sont arrondis
-    const ACCEL = 170; // px/s²
+  /* ---------- décisions (4 fois par seconde) ---------- */
+  private think() {
+    // les CT tournent vers le site où au moins deux T sont repérés
+    if (!this.rotated && !this.planted) {
+      for (const s of ['A', 'B'] as const) {
+        const c = rectCenter(this.map.sites[s]);
+        const near = this.alive('T').filter((u) => dist(u.pos, c) < 420).length;
+        if (near < 2) continue;
+        this.rotated = true;
+        this.target = s;
+        for (const u of this.alive('CT')) {
+          if (u.site === s) continue;
+          const hold = randomIn(this.map, this.map.sites[s], this.rng, 6);
+          u.path = this.pathTo(u.pos, hold);
+          u.hold = hold;
+          u.site = s;
+          u.speed = this.runSpeed();
+          u.watch = this.watchFrom(hold, rectCenter(this.map.tSpawn));
+        }
+        break;
+      }
+    }
+
+    // bombe au sol : le T le plus proche va la ramasser
+    if (this.bomb.state === 'dropped' && this.bomb.pos) {
+      const bp = this.bomb.pos;
+      const ts = this.alive('T');
+      if (ts.length && !ts.some((u) => u.task === 'pickup')) {
+        const u = ts.reduce((a, b) => (dist(a.pos, bp) < dist(b.pos, bp) ? a : b));
+        u.task = 'pickup';
+        u.path = this.pathTo(u.pos, bp);
+        u.hold = { ...bp };
+        u.speed = this.runSpeed();
+      }
+    }
+
+    // porteur : une fois sur le site et sans ennemi en vue, il pose
+    if (this.bomb.state === 'carried') {
+      const c = this.units[this.bomb.carrier];
+      if (c.alive && c.task !== 'plant' && (c.target < 0 || this.rush) && this.onSite(c.pos)) {
+        c.task = 'plant';
+        c.action = PLANT_TIME;
+        c.path = [];
+      }
+    }
+
+    // bombe posée : les CT reprennent le site (ou chassent les T si le désamorçage est impossible)
+    if (this.planted && this.bomb.pos) {
+      const bp = this.bomb.pos;
+      for (const u of this.alive('CT')) {
+        if (u.task === 'defuse') continue;
+        u.replan -= 0.25;
+        if (dist(u.pos, bp) < 16 && u.target < 0 && this.canDefuse(u)) {
+          u.task = 'defuse';
+          u.action = DEFUSE_TIME;
+          u.path = [];
+          continue;
+        }
+        if (u.replan > 0) continue;
+        u.replan = 2;
+        const foes = this.alive('T');
+        if (this.winSide === 'T' && foes.length && dist(u.pos, bp) < 140) {
+          const f = foes.reduce((a, b) => (dist(a.pos, u.pos) < dist(b.pos, u.pos) ? a : b));
+          u.task = 'hunt';
+          u.path = this.pathTo(u.pos, f.pos);
+          u.hold = { ...f.pos };
+          continue;
+        }
+        if (u.task !== 'retake' || !u.path.length) {
+          u.task = 'retake';
+          u.path = this.pathTo(u.pos, bp);
+          u.hold = { ...bp };
+          u.speed = this.runSpeed();
+        }
+      }
+    }
+  }
+
+  private onSite(p: Vec): boolean {
+    return (['A', 'B'] as const).some((s) => {
+      const r = this.map.sites[s];
+      return p.x > r.x - 20 && p.x < r.x + r.w + 20 && p.y > r.y - 20 && p.y < r.y + r.h + 20;
+    });
+  }
+  private siteAt(p: Vec): 'A' | 'B' {
+    return dist(p, rectCenter(this.map.sites.A)) < dist(p, rectCenter(this.map.sites.B)) ? 'A' : 'B';
+  }
+
+  /** Un CT peut désamorcer si aucun T vivant ne le voit (et jamais si les T doivent gagner la manche). */
+  private canDefuse(u: Unit): boolean {
+    const ts = this.alive('T');
+    if (this.winSide === 'T' && ts.length) return false;
+    const g = gridOf(this.map);
+    return !ts.some((t) => dist(t.pos, u.pos) < 700 && g.los(t.pos, u.pos));
+  }
+
+  /** Fin de manche sans pose alors que les T doivent gagner : tout le monde fonce sur le site. */
+  private startRush() {
+    this.rush = true;
+    const site = this.target;
+    for (const u of this.alive('T')) {
+      if (u.task === 'pickup' || u.task === 'plant') continue;
+      const end = this.bomb.state === 'carried' && u.idx === this.bomb.carrier
+        ? { ...this.map.bomb[site] }
+        : randomIn(this.map, this.map.sites[site], this.rng, 6);
+      u.path = this.pathTo(u.pos, end);
+      u.hold = end;
+      u.task = 'move';
+      u.speed = this.runSpeed() * 1.05;
+    }
+  }
+
+  /* ---------- ramassage, pose et désamorçage ---------- */
+  private actions(dt: number) {
+    for (const u of this.units) {
+      if (!u.alive) continue;
+      if (u.task === 'pickup' && this.bomb.state === 'dropped' && this.bomb.pos && dist(u.pos, this.bomb.pos) < 14) {
+        this.bomb.state = 'carried';
+        this.bomb.carrier = u.idx;
+        this.bomb.pos = null;
+        u.task = 'move';
+        const end = { ...this.map.bomb[this.target] };
+        u.path = this.pathTo(u.pos, end);
+        u.hold = end;
+      }
+      if (u.task === 'plant') {
+        if (this.bomb.state !== 'carried' || this.bomb.carrier !== u.idx) { u.task = 'hold'; continue; }
+        u.action -= dt;
+        if (u.action <= 0) this.finishPlant(u);
+      }
+      if (u.task === 'defuse') {
+        if (!this.planted) { u.task = 'hold'; continue; }
+        if (this.winSide === 'T' && !this.canDefuse(u)) { u.task = 'retake'; continue; }
+        u.action -= dt;
+        if (u.action <= 0) {
+          this.bomb.state = 'defused';
+          this.emit({ type: 'defuse' });
+          return this.endRound(this.teamOf('CT'), 'defuse');
+        }
+      }
+    }
+  }
+
+  private finishPlant(u: Unit) {
+    const site = this.siteAt(u.pos);
+    this.bomb = { state: 'planted', pos: { ...u.pos }, carrier: -1, site, timer: BOMB_TIME };
+    u.task = 'hold';
+    u.hold = { ...u.pos };
+    this.emit({ type: 'plant', site });
+    const ctSpawn = rectCenter(this.map.ctSpawn);
+    for (const t of this.alive('T')) {
+      if (t !== u) {
+        const hold = scatter(this.map, this.bomb.pos!, 90, this.rng);
+        t.path = this.pathTo(t.pos, hold);
+        t.hold = hold;
+        t.task = 'hold';
+      }
+      t.watch = this.watchFrom(t.hold ?? t.pos, ctSpawn);
+    }
+    for (const c of this.alive('CT')) c.replan = 0;
+  }
+
+  /* ---------- combat ---------- */
+  private combat(dt: number) {
+    const g = gridOf(this.map);
     for (const u of this.units) {
       if (!u.alive) continue;
       u.flash = Math.max(0, u.flash - dt);
+      const busy = u.task === 'plant' || u.task === 'defuse';
 
-      // à l'arrêt : petits pas autour du poste
-      if (!u.path.length && u.hold && u !== this.actor) {
-        u.wander -= dt;
-        if (u.wander <= 0) {
-          u.wander = 2 + this.rng() * 3;
-          u.path = [scatter(this.map, u.hold, 18, this.rng)];
-          u.speed = (11 + this.rng() * 6) * 1.5;
+      // la cible est-elle toujours visible ?
+      if (u.target >= 0) {
+        const t = this.units[u.target];
+        if (!t.alive) u.target = -1;
+        else if (dist(u.pos, t.pos) < WEAPON[u.weapon].range && g.los(u.pos, t.pos)) u.lostSight = 0;
+        else {
+          u.lostSight += dt;
+          if (u.lostSight > 0.7) u.target = -1;
         }
       }
-
-      // accélération / freinage
-      const moving = u.path.length > 0;
-      const goal = moving ? u.speed : 0;
-      u.v += Math.max(-ACCEL * 2 * dt, Math.min(ACCEL * dt, goal - u.v));
-
-      if (moving) {
-        const to = u.path[0];
-        const want = Math.atan2(to.y - u.pos.y, to.x - u.pos.x);
-        u.heading = turnToward(u.heading, want, TURN * dt);
-        const step = u.v * dt;
-        const d = dist(u.pos, to);
-        if (d <= Math.max(step, 9) && (u.path.length > 1 || d <= Math.max(step, 4))) {
-          if (u.path.length > 1) u.path.shift();
-          else { u.pos = { ...to }; u.path.shift(); }
-        } else {
-          u.pos = { x: u.pos.x + Math.cos(u.heading) * step, y: u.pos.y + Math.sin(u.heading) * step };
+      // repérage : ennemi dans le champ de vision (ou tout près) avec une ligne de vue
+      if (u.target < 0) {
+        let best: Unit | null = null;
+        let bd = Infinity;
+        for (const e of this.units) {
+          if (!e.alive || e.team === u.team) continue;
+          const d = dist(u.pos, e.pos);
+          if (d >= WEAPON[u.weapon].range || d >= bd) continue;
+          if (d > HEAR && angleDiff(u.angle, Math.atan2(e.pos.y - u.pos.y, e.pos.x - u.pos.x)) > FOV) continue;
+          if (!g.los(u.pos, e.pos)) continue;
+          best = e;
+          bd = d;
         }
-      } else if (u.v > 0.5) {
-        u.pos = { x: u.pos.x + Math.cos(u.heading) * u.v * dt, y: u.pos.y + Math.sin(u.heading) * u.v * dt };
+        if (best) {
+          const s = u.player.stats;
+          u.target = best.idx;
+          u.lostSight = 0;
+          u.react = Math.max(0.08, 0.16 + ((100 - s.aim) / 100) * 0.35 - (s.pos / 100) * 0.08 + this.rng() * 0.18);
+          u.cooldown = 0;
+          // utilitaire : une flash jetée sur l'adversaire de temps en temps
+          if (bd > 120 && this.rng() < (s.utl / 100) * 0.12) best.flash = Math.max(best.flash, 1.1 + this.rng() * 1.2);
+        }
       }
+      if (u.target < 0 || busy) continue;
 
-      // regard : l'ennemi proche, sinon la direction de marche
-      const foe = this.nearestEnemy(u);
-      if (foe && dist(u.pos, foe.pos) < 300) {
-        u.angle = turnToward(u.angle, Math.atan2(foe.pos.y - u.pos.y, foe.pos.x - u.pos.x), 10 * dt);
-      } else if (u.v > 8) {
-        u.angle = turnToward(u.angle, u.heading, 6 * dt);
-      }
+      const tgt = this.units[u.target];
+      u.angle = turnToward(u.angle, Math.atan2(tgt.pos.y - u.pos.y, tgt.pos.x - u.pos.x), 14 * dt);
+      if (u.react > 0) { u.react -= dt; continue; }
+      u.cooldown -= dt;
+      if (u.cooldown > 0) continue;
+      u.cooldown = WEAPON[u.weapon].interval * (0.9 + this.rng() * 0.25);
+      this.shoot(u, tgt);
+      if (this.phase !== 'live') return;
     }
   }
 
-  private nearestEnemy(u: Unit): Unit | null {
-    let best: Unit | null = null;
-    let bd = Infinity;
-    for (const e of this.units) {
-      if (!e.alive || e.team === u.team) continue;
-      const d = dist(u.pos, e.pos);
-      if (d < bd) { bd = d; best = e; }
+  private shoot(u: Unit, tgt: Unit) {
+    const w = WEAPON[u.weapon];
+    const s = u.player.stats;
+    const d = dist(u.pos, tgt.pos);
+    u.lastShot = this.t;
+    let p = (0.2 + (s.aim / 100) * 0.5) * w.acc * Math.max(0.2, 1 - d / (w.range * 1.3));
+    if (u.v > 20) p *= 0.45;
+    if (u.flash > 0) p *= 0.15;
+    p *= u.team === this.winTeam ? 1.12 : 0.9;
+    if (this.aliveIn(u.team) === 1) p *= 0.9 + (s.clu / 100) * 0.3;
+    if (this.isProtected(tgt)) p *= 0.4;
+    if (this.isProtected(u)) p *= 1.7;
+    if (this.rush && this.sideOf(u.team) === 'CT') p *= 0.55;
+    p = Math.min(0.92, Math.max(0.03, p));
+    // la cible se retourne quand on lui tire dessus
+    if (tgt.target < 0 && tgt.task !== 'plant' && tgt.task !== 'defuse') {
+      tgt.target = u.idx;
+      tgt.react = 0.12 + this.rng() * 0.15;
     }
-    return best;
+    if (this.rng() >= p) return;
+    const hs = this.rng() < 0.06 + (s.aim / 100) * 0.16;
+    const dmg = hs ? w.hs : w.body[0] + Math.round(this.rng() * (w.body[1] - w.body[0]));
+    tgt.hp -= dmg;
+    if (this.isProtected(tgt)) tgt.hp = Math.max(1, tgt.hp);
+    if (tgt.hp <= 0) this.kill(u, tgt, hs);
   }
 
-  private closestPairDist(): number {
-    let bd = Infinity;
-    for (const a of this.units) {
-      if (!a.alive || a.team !== 0) continue;
-      for (const b of this.units) {
-        if (!b.alive || b.team !== 1) continue;
-        bd = Math.min(bd, dist(a.pos, b.pos));
-      }
-    }
-    return bd;
-  }
-
-  private runScript(dt: number) {
-    // les CT hors site rotent vers le site attaqué
-    if (!this.rotated && this.stage === 'approach' && this.t >= this.rotateAt) {
-      this.rotated = true;
-      this.rotateCTs();
-    }
-
-    if (this.stage === 'approach' || this.stage === 'planted') {
-      const forced = this.t > ROUND_TIME - 6 || (this.stage === 'planted' && this.bombLeft < 9);
-      if (this.queue.length && (forced || (this.t >= this.nextAt && (this.closestPairDist() < 230 || this.t > this.nextAt + 9)))) {
-        this.fireKill(this.queue.shift()!);
-        this.nextAt = this.t + (this.stage === 'planted' ? 1.5 + this.rng() * 2.5 : 2 + this.rng() * 4);
-        if (this.phase !== 'live') return;
-      }
-    }
-
-    if (this.stage === 'approach' && !this.queue.length && this.script.plant) this.beginPlant();
-
-    if (this.stage === 'planting' && this.actor) {
-      if (!this.actor.alive) { this.beginPlant(); return; }
-      if (!this.actor.path.length) {
-        this.actionLeft -= dt;
-        if (this.actionLeft <= 0) this.finishPlant();
-      }
-    }
-
-    if (this.stage === 'planted') {
-      if (this.script.end === 'bomb' && this.bombLeft <= 0) return this.endRound(this.winnerTeamOfScript(), 'bomb');
-      if (this.script.end === 'defuse' && !this.queue.length && !this.alive('T').length) this.beginDefuse();
-    }
-
-    if (this.stage === 'defusing' && this.actor) {
-      if (!this.actor.alive) { this.beginDefuse(); return; }
-      if (!this.actor.path.length) {
-        this.actionLeft -= dt;
-        if (this.actionLeft <= 0) { this.emit({ type: 'defuse' }); this.endRound(this.winnerTeamOfScript(), 'defuse'); }
-      }
-    }
-  }
-
-  private winnerTeamOfScript(): 0 | 1 {
-    return this.schedule[this.round - 1];
-  }
-
-  private rotateCTs() {
-    const site = this.target;
-    for (const u of this.alive('CT')) {
-      if (u.site === site) continue;
-      const hold = randomIn(this.map, this.map.sites[site], this.rng, 6);
-      u.path = this.pathTo(u.pos, hold);
-      u.hold = hold;
-      u.site = site;
-      u.speed = this.runSpeed();
-    }
-  }
-
-  private beginPlant() {
-    const tAlive = this.alive('T');
-    if (!tAlive.length) return;
-    const bombPos = { ...this.map.bomb[this.target] };
-    const carrying = tAlive.find((u) => u.idx === this.carrier);
-    const planter = carrying ?? tAlive.reduce((a, b) => (dist(a.pos, bombPos) < dist(b.pos, bombPos) ? a : b));
-    this.actor = planter;
-    this.stage = 'planting';
-    this.actionLeft = PLANT_TIME;
-    planter.path = this.pathTo(planter.pos, bombPos);
-    planter.hold = bombPos;
-    planter.speed = this.runSpeed();
-    this.bombPos = bombPos;
-  }
-
-  private finishPlant() {
-    this.stage = 'planted';
-    this.bombLeft = BOMB_TIME;
-    this.bombSite = this.target;
-    this.actor = null;
-    this.queue = [...this.script.post];
-    this.emit({ type: 'plant', site: this.target });
-    if (this.script.end === 'bomb') {
-      // les CT survivants ne peuvent plus retourner la situation : ils économisent leur arme
-      for (const u of this.alive('CT')) {
-        const safe = rectCenter(this.map.ctSpawn);
-        u.path = this.pathTo(u.pos, safe);
-        u.hold = safe;
-        u.speed = this.runSpeed();
-      }
-    } else {
-      for (const u of this.alive('CT')) {
-        const hold = scatter(this.map, this.bombPos!, 70, this.rng);
-        u.path = this.pathTo(u.pos, hold);
-        u.hold = hold;
-        u.speed = this.runSpeed();
-      }
-      for (const u of this.alive('T')) {
-        const hold = scatter(this.map, this.bombPos!, 70, this.rng);
-        u.path = this.pathTo(u.pos, hold);
-        u.hold = hold;
-        u.speed = this.runSpeed();
-      }
-      this.nextAt = this.t + 4 + this.rng() * 3;
-    }
-  }
-
-  private beginDefuse() {
-    const cts = this.alive('CT');
-    if (!cts.length || !this.bombPos) return;
-    const bomb = this.bombPos;
-    const d = cts.reduce((a, b) => (dist(a.pos, bomb) < dist(b.pos, bomb) ? a : b));
-    this.actor = d;
-    this.stage = 'defusing';
-    this.actionLeft = DEFUSE_TIME;
-    d.path = this.pathTo(d.pos, bomb);
-    d.hold = bomb;
-    d.speed = this.runSpeed() * 1.1;
-  }
-
-  private fireKill(victimSide: Side) {
-    const killerSide: Side = victimSide === 'CT' ? 'T' : 'CT';
-    const killers = this.alive(killerSide);
-    const victims = this.alive(victimSide);
-    if (!killers.length || !victims.length) return;
-    let best: [Unit, Unit] | null = null;
-    let bs = Infinity;
-    for (const k of killers) {
-      for (const v of victims) {
-        const score = dist(k.pos, v.pos) + this.rng() * 90 - (k.player.ovr - v.player.ovr) * 2;
-        if (score < bs) { bs = score; best = [k, v]; }
-      }
-    }
-    const [k, v] = best!;
+  private kill(k: Unit, v: Unit, hs: boolean) {
     v.alive = false;
     v.hp = 0;
     v.path = [];
+    v.target = -1;
     v.deaths += 1;
     k.kills += 1;
-    k.money = Math.min(16000, k.money + 300);
-    if (this.rng() < 0.45) k.hp = Math.max(4, k.hp - Math.round(10 + this.rng() * 55));
-    if (this.rng() < 0.3) {
-      const near = this.units.filter((x) => x.alive && dist(x.pos, v.pos) < 220);
-      if (near.length) near[Math.floor(this.rng() * near.length)].flash = 1.2 + this.rng() * 1.6;
+    k.money = Math.min(16000, k.money + WEAPON[k.weapon].reward);
+    if (k.target === v.idx) k.target = -1;
+    if (this.bomb.state === 'carried' && this.bomb.carrier === v.idx) {
+      this.bomb = { ...this.bomb, state: 'dropped', pos: { ...v.pos }, carrier: -1 };
     }
-    this.emit({ type: 'kill', killer: k.idx, victim: v.idx, from: { ...k.pos }, to: { ...v.pos } });
-    if (this.rng() < 0.12) {
+    this.emit({ type: 'kill', killer: k.idx, victim: v.idx, from: { ...k.pos }, to: { ...v.pos }, hs });
+    if (this.rng() < 0.1) {
       const speaker = this.rng() < 0.5 ? v : k;
-      this.chatLine(speaker.idx, speaker === v ? ['nt', 'wp', 'gj', 'wow'][Math.floor(this.rng() * 4)] : ['ez', 'nice', ':)'][Math.floor(this.rng() * 3)]);
+      this.chat(speaker.idx, speaker === v ? ['nt', 'wp', 'gj', 'wow'][Math.floor(this.rng() * 4)] : ['ez', 'nice', ':)'][Math.floor(this.rng() * 3)]);
     }
-    if (!this.alive(victimSide).length) {
-      if (victimSide === 'CT') return this.endRound(this.sideOf(0) === 'T' ? 0 : 1, 'elim');
-      if (this.stage !== 'planted' && this.stage !== 'defusing') return this.endRound(this.sideOf(0) === 'CT' ? 0 : 1, 'elim');
+    if (!this.alive('CT').length) return this.endRound(this.teamOf('T'), 'elim');
+    if (!this.alive('T').length && !this.planted) return this.endRound(this.teamOf('CT'), 'elim');
+  }
+
+  /* ---------- déplacements ---------- */
+  private move(dt: number) {
+    const TURN = 9; // rad/s : coins arrondis
+    const ACCEL = 170;
+    const g = gridOf(this.map);
+    for (const u of this.units) {
+      if (!u.alive) continue;
+      if (u.delay > 0) { u.delay -= dt; continue; }
+      const engaged = u.target >= 0 && u.react <= 0.05 && u.task !== 'pickup';
+      const busy = u.task === 'plant' || u.task === 'defuse';
+
+      // à l'arrêt : petits pas autour du poste
+      if (!u.path.length && u.hold && !busy && !engaged) {
+        u.wander -= dt;
+        if (u.wander <= 0) {
+          u.wander = 2.5 + this.rng() * 3.5;
+          u.path = [scatter(this.map, u.hold, 12, this.rng)];
+          u.speed = RUN * 0.35;
+        }
+      }
+
+      const moving = u.path.length > 0 && !engaged && !busy;
+      u.v += Math.max(-ACCEL * 2.5 * dt, Math.min(ACCEL * dt, (moving ? u.speed : 0) - u.v));
+
+      if (moving) {
+        const to = u.path[0];
+        u.heading = turnToward(u.heading, Math.atan2(to.y - u.pos.y, to.x - u.pos.x), TURN * dt);
+        const step = u.v * dt;
+        const d = dist(u.pos, to);
+        if (u.path.length > 1 && d <= Math.max(step, 10)) u.path.shift();
+        else if (u.path.length === 1 && d <= Math.max(step, 3)) {
+          u.pos = { ...to };
+          u.path.shift();
+          if (u.task === 'move') u.task = 'hold';
+        } else this.advance(u, step, g);
+      } else if (u.v > 0.5) this.advance(u, u.v * dt, g);
+
+      // regard : la cible (géré par le combat) > la marche > la direction surveillée
+      if (u.target < 0) {
+        const running = u.v > 18;
+        u.angle = turnToward(u.angle, running ? u.heading : u.watch, (running ? 6 : 3) * dt);
+      }
+    }
+
+    // les coéquipiers ne se marchent pas dessus
+    for (let i = 0; i < this.units.length; i++) {
+      const a = this.units[i];
+      if (!a.alive) continue;
+      for (let j = i + 1; j < this.units.length; j++) {
+        const b = this.units[j];
+        if (!b.alive || b.team !== a.team) continue;
+        const d = dist(a.pos, b.pos);
+        if (d >= 20 || d < 0.01) continue;
+        const push = ((20 - d) / 2) * Math.min(1, dt * 8);
+        const nx = (a.pos.x - b.pos.x) / d;
+        const ny = (a.pos.y - b.pos.y) / d;
+        const pa = { x: a.pos.x + nx * push, y: a.pos.y + ny * push };
+        const pb = { x: b.pos.x - nx * push, y: b.pos.y - ny * push };
+        if (g.walk(pa) && a.task !== 'plant' && a.task !== 'defuse') a.pos = pa;
+        if (g.walk(pb) && b.task !== 'plant' && b.task !== 'defuse') b.pos = pb;
+      }
     }
   }
 
-  private endRound(winTeam: 0 | 1, reason: EndType) {
+  /** Avance dans la direction de marche sans traverser un mur (glisse le long sinon). */
+  private advance(u: Unit, step: number, g: ReturnType<typeof gridOf>) {
+    const nx = u.pos.x + Math.cos(u.heading) * step;
+    const ny = u.pos.y + Math.sin(u.heading) * step;
+    if (g.walk({ x: nx, y: ny })) u.pos = { x: nx, y: ny };
+    else if (g.walk({ x: nx, y: u.pos.y })) u.pos = { x: nx, y: u.pos.y };
+    else if (g.walk({ x: u.pos.x, y: ny })) u.pos = { x: u.pos.x, y: ny };
+    else if (u.path.length) u.pos = { ...u.path[0] }; // coincé : on se recolle au chemin
+  }
+
+  /* ---------- fin de manche ---------- */
+  private endRound(winTeam: 0 | 1, reason: EndReason) {
     if (this.phase !== 'live') return;
     this.phase = 'ended';
-    this.stage = 'ended';
-    this.lastWinner = winTeam;
     this.score[winTeam] += 1;
     const loser = (1 - winTeam) as 0 | 1;
     const bonus = Math.min(4, this.lossStreak[loser]);
     for (const u of this.units) {
       u.money = Math.min(16000, u.money + (u.team === winTeam ? 3250 : 1400 + 500 * bonus));
+      u.target = -1;
     }
     this.lossStreak[loser] = Math.min(4, this.lossStreak[loser] + 1);
     this.lossStreak[winTeam] = Math.max(0, this.lossStreak[winTeam] - 1);
     this.emit({ type: 'roundEnd', round: this.round, winTeam, reason });
-    if (this.rng() < 0.35) {
-      const losers = this.units.filter((u) => u.team === loser);
-      this.chatLine(losers[Math.floor(this.rng() * losers.length)].idx, ['wp', 'gg', 'nt'][Math.floor(this.rng() * 3)]);
-    }
+    const losers = this.units.filter((u) => u.team === loser);
+    if (this.rng() < 0.3) this.chat(losers[Math.floor(this.rng() * losers.length)].idx, ['wp', 'gg', 'nt'][Math.floor(this.rng() * 3)]);
     if (this.score[0] >= 13 || this.score[1] >= 13) {
       this.phase = 'over';
-      const l = this.units.filter((u) => u.team === loser);
-      this.chatLine(l[Math.floor(this.rng() * l.length)].idx, 'gg wp');
+      this.chat(losers[Math.floor(this.rng() * losers.length)].idx, 'gg wp');
       this.emit({ type: 'matchEnd' });
     }
   }
