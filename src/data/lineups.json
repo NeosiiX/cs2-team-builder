@@ -1,0 +1,1071 @@
+{
+ "dust2": {
+  "execute": {
+   "A": [
+    {
+     "kind": "smoke",
+     "name": "Fumée CT",
+     "at": {
+      "x": 690,
+      "y": 180
+     },
+     "from": {
+      "x": 918,
+      "y": 385
+     },
+     "air": 2.58,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "smoke",
+     "name": "Fumée Short",
+     "at": {
+      "x": 648,
+      "y": 300
+     },
+     "from": {
+      "x": 609,
+      "y": 424
+     },
+     "air": 0.88,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "molotov",
+     "name": "Molotov Goose",
+     "at": {
+      "x": 850,
+      "y": 70
+     },
+     "from": {
+      "x": 906,
+      "y": 406
+     },
+     "air": 1.53,
+     "throw": "runjump",
+     "delay": 0.0
+    },
+    {
+     "kind": "molotov",
+     "name": "Molotov Default",
+     "at": {
+      "x": 812,
+      "y": 172
+     },
+     "from": {
+      "x": 906,
+      "y": 406
+     },
+     "air": 1.87,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "flash",
+     "name": "Flash Long",
+     "at": {
+      "x": 905,
+      "y": 330
+     },
+     "from": {
+      "x": 906,
+      "y": 406
+     },
+     "air": 0.5,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "flash",
+     "name": "Flash site A",
+     "at": {
+      "x": 850,
+      "y": 185
+     },
+     "from": {
+      "x": 906,
+      "y": 406
+     },
+     "air": 1.68,
+     "throw": "stand",
+     "delay": 0.0
+    }
+   ],
+   "B": [
+    {
+     "kind": "smoke",
+     "name": "Fumée Portes B",
+     "at": {
+      "x": 278,
+      "y": 235
+     },
+     "from": {
+      "x": 108,
+      "y": 280
+     },
+     "air": 1.17,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "smoke",
+     "name": "Fumée Fenêtre",
+     "at": {
+      "x": 287,
+      "y": 130
+     },
+     "from": {
+      "x": 117,
+      "y": 310
+     },
+     "air": 3.8,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "molotov",
+     "name": "Molotov Back plat",
+     "at": {
+      "x": 110,
+      "y": 60
+     },
+     "from": {
+      "x": 109,
+      "y": 409
+     },
+     "air": 1.57,
+     "throw": "runjump",
+     "delay": 0.0
+    },
+    {
+     "kind": "molotov",
+     "name": "Molotov Default B",
+     "at": {
+      "x": 212,
+      "y": 130
+     },
+     "from": {
+      "x": 153,
+      "y": 301
+     },
+     "air": 1.21,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "flash",
+     "name": "Flash sortie tunnel",
+     "at": {
+      "x": 120,
+      "y": 300
+     },
+     "from": {
+      "x": 117,
+      "y": 336
+     },
+     "air": 0.26,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "flash",
+     "name": "Flash site B",
+     "at": {
+      "x": 190,
+      "y": 190
+     },
+     "from": {
+      "x": 117,
+      "y": 336
+     },
+     "air": 1.07,
+     "throw": "stand",
+     "delay": 0.0
+    }
+   ]
+  },
+  "ctDelay": [
+   {
+    "zone": {
+     "x": 740,
+     "y": 620
+    },
+    "r": 100,
+    "nades": [
+     {
+      "kind": "molotov",
+      "name": "Incendiaire Long doors",
+      "at": {
+       "x": 731.0,
+       "y": 535.0
+      },
+      "from": {
+       "x": 899,
+       "y": 427
+      },
+      "air": 1.35,
+      "throw": "stand",
+      "delay": 0.0
+     },
+     {
+      "kind": "flash",
+      "name": "Flash Long",
+      "at": {
+       "x": 860,
+       "y": 520
+      },
+      "from": {
+       "x": 929,
+       "y": 272
+      },
+      "air": 1.81,
+      "throw": "stand",
+      "delay": 0.4
+     }
+    ]
+   },
+   {
+    "zone": {
+     "x": 150,
+     "y": 480
+    },
+    "r": 110,
+    "nades": [
+     {
+      "kind": "molotov",
+      "name": "Incendiaire Tunnels",
+      "at": {
+       "x": 115,
+       "y": 355
+      },
+      "from": {
+       "x": 165,
+       "y": 223
+      },
+      "air": 0.94,
+      "throw": "stand",
+      "delay": 0.0
+     },
+     {
+      "kind": "flash",
+      "name": "Flash sortie tunnel",
+      "at": {
+       "x": 120,
+       "y": 330
+      },
+      "from": {
+       "x": 189,
+       "y": 229
+      },
+      "air": 0.81,
+      "throw": "stand",
+      "delay": 0.5
+     }
+    ]
+   },
+   {
+    "zone": {
+     "x": 575,
+     "y": 410
+    },
+    "r": 75,
+    "nades": [
+     {
+      "kind": "molotov",
+      "name": "Incendiaire Catwalk",
+      "at": {
+       "x": 640,
+       "y": 330
+      },
+      "from": {
+       "x": 651,
+       "y": 261
+      },
+      "air": 0.46,
+      "throw": "stand",
+      "delay": 0.0
+     }
+    ]
+   }
+  ],
+  "retake": {
+   "A": [
+    {
+     "kind": "flash",
+     "name": "Flash retake A",
+     "at": {
+      "x": 788,
+      "y": 158
+     },
+     "from": {
+      "x": 686,
+      "y": 190
+     },
+     "air": 0.7,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "smoke",
+     "name": "Fumée Long",
+     "at": {
+      "x": 905,
+      "y": 330
+     },
+     "from": {
+      "x": 686,
+      "y": 190
+     },
+     "air": 4.13,
+     "throw": "stand",
+     "delay": 0.3
+    }
+   ],
+   "B": [
+    {
+     "kind": "flash",
+     "name": "Flash retake B",
+     "at": {
+      "x": 212,
+      "y": 130
+     },
+     "from": {
+      "x": 189,
+      "y": 229
+     },
+     "air": 0.66,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "smoke",
+     "name": "Fumée Tunnels",
+     "at": {
+      "x": 112,
+      "y": 296
+     },
+     "from": {
+      "x": 301,
+      "y": 216
+     },
+     "air": 1.39,
+     "throw": "stand",
+     "delay": 0.3
+    }
+   ]
+  },
+  "early": [
+   {
+    "kind": "smoke",
+    "name": "Fumée Xbox",
+    "at": {
+     "x": 470,
+     "y": 575
+    },
+    "from": {
+     "x": 469,
+     "y": 866
+    },
+    "air": 3.74,
+    "throw": "stand",
+    "delay": 4,
+    "side": "T",
+    "p": 0.7
+   },
+   {
+    "kind": "smoke",
+    "name": "Fumée Mid doors",
+    "at": {
+     "x": 465,
+     "y": 330
+    },
+    "from": {
+     "x": 499,
+     "y": 224
+    },
+    "air": 0.73,
+    "throw": "stand",
+    "delay": 3,
+    "side": "CT",
+    "p": 0.5
+   }
+  ]
+ },
+ "mirage": {
+  "execute": {
+   "A": [
+    {
+     "kind": "smoke",
+     "name": "Fumée Jungle",
+     "at": {
+      "x": 423,
+      "y": 640
+     },
+     "from": {
+      "x": 690,
+      "y": 640
+     },
+     "air": 3.61,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "smoke",
+     "name": "Fumée Stairs",
+     "at": {
+      "x": 493,
+      "y": 723
+     },
+     "from": {
+      "x": 690,
+      "y": 640
+     },
+     "air": 1.69,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "molotov",
+     "name": "Molotov Firebox",
+     "at": {
+      "x": 518,
+      "y": 749
+     },
+     "from": {
+      "x": 654,
+      "y": 744
+     },
+     "air": 1.07,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "molotov",
+     "name": "Molotov Default",
+     "at": {
+      "x": 560,
+      "y": 785
+     },
+     "from": {
+      "x": 654,
+      "y": 744
+     },
+     "air": 0.76,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "flash",
+     "name": "Flash Palace",
+     "at": {
+      "x": 605,
+      "y": 790
+     },
+     "from": {
+      "x": 654,
+      "y": 744
+     },
+     "air": 0.5,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "flash",
+     "name": "Flash Ramp",
+     "at": {
+      "x": 620,
+      "y": 680
+     },
+     "from": {
+      "x": 690,
+      "y": 640
+     },
+     "air": 0.6,
+     "throw": "stand",
+     "delay": 0.0
+    }
+   ],
+   "B": [
+    {
+     "kind": "smoke",
+     "name": "Fumée Kitchen",
+     "at": {
+      "x": 216,
+      "y": 383
+     },
+     "from": {
+      "x": 330,
+      "y": 199
+     },
+     "air": 1.65,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "molotov",
+     "name": "Molotov Bench",
+     "at": {
+      "x": 137,
+      "y": 284
+     },
+     "from": {
+      "x": 298,
+      "y": 176
+     },
+     "air": 1.46,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "molotov",
+     "name": "Molotov Van",
+     "at": {
+      "x": 270,
+      "y": 345
+     },
+     "from": {
+      "x": 382,
+      "y": 191
+     },
+     "air": 1.44,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "flash",
+     "name": "Flash Apps",
+     "at": {
+      "x": 300,
+      "y": 235
+     },
+     "from": {
+      "x": 333,
+      "y": 202
+     },
+     "air": 1.17,
+     "throw": "lob",
+     "delay": 0.0
+    },
+    {
+     "kind": "flash",
+     "name": "Flash site B",
+     "at": {
+      "x": 232,
+      "y": 284
+     },
+     "from": {
+      "x": 339,
+      "y": 199
+     },
+     "air": 1.69,
+     "throw": "mid",
+     "delay": 0.0
+    }
+   ]
+  },
+  "ctDelay": [
+   {
+    "zone": {
+     "x": 754,
+     "y": 649
+    },
+    "r": 108,
+    "nades": [
+     {
+      "kind": "molotov",
+      "name": "Incendiaire Ramp",
+      "at": {
+       "x": 650,
+       "y": 660
+      },
+      "from": {
+       "x": 520,
+       "y": 800
+      },
+      "air": 1.48,
+      "throw": "stand",
+      "delay": 0.0
+     },
+     {
+      "kind": "flash",
+      "name": "Flash Ramp",
+      "at": {
+       "x": 690,
+       "y": 649
+      },
+      "from": {
+       "x": 520,
+       "y": 800
+      },
+      "air": 1.83,
+      "throw": "stand",
+      "delay": 0.4
+     }
+    ]
+   },
+   {
+    "zone": {
+     "x": 787,
+     "y": 781
+    },
+    "r": 91,
+    "nades": [
+     {
+      "kind": "molotov",
+      "name": "Incendiaire Palace",
+      "at": {
+       "x": 622,
+       "y": 795
+      },
+      "from": {
+       "x": 514,
+       "y": 800
+      },
+      "air": 1.35,
+      "throw": "mid",
+      "delay": 0.0
+     }
+    ]
+   },
+   {
+    "zone": {
+     "x": 489,
+     "y": 209
+    },
+    "r": 116,
+    "nades": [
+     {
+      "kind": "molotov",
+      "name": "Incendiaire Apps",
+      "at": {
+       "x": 330,
+       "y": 230
+      },
+      "from": {
+       "x": 234,
+       "y": 307
+      },
+      "air": 0.92,
+      "throw": "stand",
+      "delay": 0.0
+     },
+     {
+      "kind": "flash",
+      "name": "Flash Apps",
+      "at": {
+       "x": 402.0,
+       "y": 209.0
+      },
+      "from": {
+       "x": 242,
+       "y": 225
+      },
+      "air": 1.2,
+      "throw": "jump",
+      "delay": 0.4
+     }
+    ]
+   }
+  ],
+  "retake": {
+   "A": [
+    {
+     "kind": "flash",
+     "name": "Flash retake A",
+     "at": {
+      "x": 560.0,
+      "y": 769.0
+     },
+     "from": {
+      "x": 458,
+      "y": 620
+     },
+     "air": 1.38,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "smoke",
+     "name": "Fumée Palace",
+     "at": {
+      "x": 622,
+      "y": 795
+     },
+     "from": {
+      "x": 431,
+      "y": 632
+     },
+     "air": 3.77,
+     "throw": "stand",
+     "delay": 0.3
+    }
+   ],
+   "B": [
+    {
+     "kind": "flash",
+     "name": "Flash retake B",
+     "at": {
+      "x": 234,
+      "y": 284
+     },
+     "from": {
+      "x": 268,
+      "y": 452
+     },
+     "air": 1.31,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "smoke",
+     "name": "Fumée Apps",
+     "at": {
+      "x": 323,
+      "y": 230
+     },
+     "from": {
+      "x": 250,
+      "y": 440
+     },
+     "air": 1.77,
+     "throw": "stand",
+     "delay": 0.3
+    }
+   ]
+  },
+  "early": []
+ },
+ "inferno": {
+  "execute": {
+   "A": [
+    {
+     "kind": "smoke",
+     "name": "Fumée CT",
+     "at": {
+      "x": 904,
+      "y": 592
+     },
+     "from": {
+      "x": 700,
+      "y": 690
+     },
+     "air": 3.84,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "smoke",
+     "name": "Fumée Arch",
+     "at": {
+      "x": 800,
+      "y": 545
+     },
+     "from": {
+      "x": 700,
+      "y": 687
+     },
+     "air": 4.03,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "molotov",
+     "name": "Molotov Pit",
+     "at": {
+      "x": 892.0,
+      "y": 852.0
+     },
+     "from": {
+      "x": 770,
+      "y": 784
+     },
+     "air": 1.96,
+     "throw": "mid",
+     "delay": 0.0
+    },
+    {
+     "kind": "flash",
+     "name": "Flash Long",
+     "at": {
+      "x": 734,
+      "y": 650
+     },
+     "from": {
+      "x": 700,
+      "y": 690
+     },
+     "air": 0.38,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "flash",
+     "name": "Flash Balcon",
+     "at": {
+      "x": 788,
+      "y": 799
+     },
+     "from": {
+      "x": 741,
+      "y": 803
+     },
+     "air": 0.35,
+     "throw": "stand",
+     "delay": 0.0
+    }
+   ],
+   "B": [
+    {
+     "kind": "smoke",
+     "name": "Fumée CT",
+     "at": {
+      "x": 610,
+      "y": 240
+     },
+     "from": {
+      "x": 499,
+      "y": 419
+     },
+     "air": 3.97,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "smoke",
+     "name": "Fumée Coffins",
+     "at": {
+      "x": 446.0,
+      "y": 183.0
+     },
+     "from": {
+      "x": 523,
+      "y": 386
+     },
+     "air": 3.92,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "molotov",
+     "name": "Molotov Dark",
+     "at": {
+      "x": 556.0,
+      "y": 283.0
+     },
+     "from": {
+      "x": 596,
+      "y": 352
+     },
+     "air": 0.94,
+     "throw": "mid",
+     "delay": 0.0
+    },
+    {
+     "kind": "flash",
+     "name": "Flash Banana",
+     "at": {
+      "x": 520,
+      "y": 358
+     },
+     "from": {
+      "x": 529,
+      "y": 389
+     },
+     "air": 0.24,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "flash",
+     "name": "Flash site B",
+     "at": {
+      "x": 519.0,
+      "y": 216.0
+     },
+     "from": {
+      "x": 596,
+      "y": 352
+     },
+     "air": 1.18,
+     "throw": "stand",
+     "delay": 0.0
+    }
+   ]
+  },
+  "ctDelay": [
+   {
+    "zone": {
+     "x": 483,
+     "y": 503
+    },
+    "r": 143,
+    "nades": [
+     {
+      "kind": "molotov",
+      "name": "Incendiaire Banana",
+      "at": {
+       "x": 499,
+       "y": 450
+      },
+      "from": {
+       "x": 504,
+       "y": 374
+      },
+      "air": 0.56,
+      "throw": "stand",
+      "delay": 0.0
+     },
+     {
+      "kind": "smoke",
+      "name": "Fumée Banana",
+      "at": {
+       "x": 515,
+       "y": 400
+      },
+      "from": {
+       "x": 520,
+       "y": 235
+      },
+      "air": 4.21,
+      "throw": "stand",
+      "delay": 0.3
+     },
+     {
+      "kind": "flash",
+      "name": "Flash Banana",
+      "at": {
+       "x": 521,
+       "y": 382
+      },
+      "from": {
+       "x": 525,
+       "y": 365
+      },
+      "air": 0.45,
+      "throw": "lob",
+      "delay": 0.6
+     }
+    ]
+   },
+   {
+    "zone": {
+     "x": 653,
+     "y": 817
+    },
+    "r": 126,
+    "nades": []
+   },
+   {
+    "zone": {
+     "x": 707,
+     "y": 646
+    },
+    "r": 99,
+    "nades": [
+     {
+      "kind": "flash",
+      "name": "Flash Long",
+      "at": {
+       "x": 798.0,
+       "y": 670.0
+      },
+      "from": {
+       "x": 845,
+       "y": 663
+      },
+      "air": 0.35,
+      "throw": "stand",
+      "delay": 0.0
+     }
+    ]
+   }
+  ],
+  "retake": {
+   "A": [
+    {
+     "kind": "flash",
+     "name": "Flash retake A",
+     "at": {
+      "x": 831,
+      "y": 700
+     },
+     "from": {
+      "x": 890,
+      "y": 605
+     },
+     "air": 0.83,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "smoke",
+     "name": "Fumée Pit",
+     "at": {
+      "x": 880,
+      "y": 844
+     },
+     "from": {
+      "x": 881,
+      "y": 599
+     },
+     "air": 1.91,
+     "throw": "stand",
+     "delay": 0.3
+    }
+   ],
+   "B": [
+    {
+     "kind": "flash",
+     "name": "Flash retake B",
+     "at": {
+      "x": 506,
+      "y": 225
+     },
+     "from": {
+      "x": 564,
+      "y": 200
+     },
+     "air": 0.46,
+     "throw": "stand",
+     "delay": 0.0
+    },
+    {
+     "kind": "smoke",
+     "name": "Fumée Banana",
+     "at": {
+      "x": 520,
+      "y": 360
+     },
+     "from": {
+      "x": 463,
+      "y": 274
+     },
+     "air": 4.27,
+     "throw": "stand",
+     "delay": 0.3
+    }
+   ]
+  },
+  "early": [
+   {
+    "kind": "molotov",
+    "name": "Molotov Car",
+    "at": {
+     "x": 560,
+     "y": 380
+    },
+    "from": {
+     "x": 427,
+     "y": 513
+    },
+    "air": 1.44,
+    "throw": "stand",
+    "delay": 9,
+    "side": "T",
+    "p": 0.45
+   }
+  ]
+ }
+}

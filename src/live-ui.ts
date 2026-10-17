@@ -284,9 +284,11 @@ export function startLive(opts: LiveUIOptions) {
     const NADE_COL: Record<string, string> = { smoke: '#d9dee6', flash: '#fff6c8', molotov: '#ff8a2a' };
     for (const n of m.nades) {
       if (m.t < n.land) {
-        const k = Math.max(0, (m.t - n.thrown) / (n.land - n.thrown));
+        // vol jusqu'à l'impact (cloche d'autant plus haute que le vol est long), puis la grenade roule / attend sa mèche
+        const air = Math.max(0.05, n.arrive - n.thrown);
+        const k = Math.min(1, Math.max(0, (m.t - n.thrown) / air));
         const x = n.from.x + (n.to.x - n.from.x) * k;
-        const y = n.from.y + (n.to.y - n.from.y) * k - Math.sin(k * Math.PI) * 26 * U;
+        const y = n.from.y + (n.to.y - n.from.y) * k - Math.sin(k * Math.PI) * Math.min(40, 8 + air * 9) * U;
         ctx.fillStyle = NADE_COL[n.kind];
         ctx.beginPath(); ctx.arc(x, y, 2.6 * U, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1 * U; ctx.stroke();
