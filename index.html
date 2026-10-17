@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CS2 Team Builder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <header class="topbar">
@@ -11,7 +17,12 @@
         <span class="brand-mark">◆</span>
         <span>CS2 <b>TEAM BUILDER</b></span>
       </div>
-      <button id="account-btn" class="btn btn-gold" type="button">Créer son compte</button>
+      <div class="topbar-right">
+        <div class="coins" title="Tes pièces">🪙 <b id="coins">0</b>
+          <button id="add-coins-btn" class="coins-add" type="button" aria-label="Ajouter des pièces" title="Ajouter des pièces">+</button>
+        </div>
+        <button id="account-btn" class="btn btn-gold" type="button">Créer son compte</button>
+      </div>
     </header>
 
     <nav class="tabs" id="tabs" aria-label="Navigation principale"></nav>
@@ -19,6 +30,11 @@
 
     <dialog id="account-dialog" class="dialog"></dialog>
     <dialog id="picker-dialog" class="dialog dialog-wide"></dialog>
+    <dialog id="pack-dialog" class="dialog dialog-pack"></dialog>
+    <dialog id="coins-dialog" class="dialog"></dialog>
+    <dialog id="team-dialog" class="dialog dialog-team"></dialog>
+    <dialog id="match-dialog" class="dialog dialog-match"></dialog>
+    <dialog id="live-dialog" class="live-dialog"></dialog>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

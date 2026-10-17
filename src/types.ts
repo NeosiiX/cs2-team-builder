@@ -1,5 +1,5 @@
 export type Role = 'IGL' | 'RIF' | 'AWP' | 'SUP' | 'LRK';
-export type Rarity = 'silver' | 'gold' | 'legend';
+export type Rarity = 'silver' | 'gold' | 'legend' | 'icon';
 export type StatKey = 'aim' | 'utl' | 'pos' | 'clu';
 export type Stats = Record<StatKey, number>;
 
@@ -45,7 +45,50 @@ export interface UserProfile {
   createdAt: string;
 }
 
+export type TeamLogo =
+  | { kind: 'emoji'; emoji: string; color: string }
+  | { kind: 'image'; dataUrl: string };
+
+export interface TeamInfo {
+  name: string;
+  logo: TeamLogo;
+  /** résultats : pour l'instant à 0, seront alimentés par les futurs matchs */
+  wins: number;
+  losses: number;
+}
+
+export const defaultTeamInfo = (): TeamInfo => ({
+  name: 'Mon équipe',
+  logo: { kind: 'emoji', emoji: '🎯', color: '#e8a838' },
+  wins: 0,
+  losses: 0,
+});
+
+export type ModeId = 'scrim' | 'showmatch' | 'lan';
+
+export interface MatchRecord {
+  id: string;
+  ts: number;
+  mode: ModeId;
+  opponent: { name: string; emoji: string; ovr: number };
+  /** note de ton équipe au moment du match */
+  myOvr: number;
+  myScore: number;
+  oppScore: number;
+  won: boolean;
+  /** ticket d'entrée payé et gain reçu (le bilan est gain - entrée) */
+  entry: number;
+  payout: number;
+}
+
 export interface SaveData {
   profile: UserProfile | null;
   team: TeamIds;
+  teamInfo: TeamInfo;
+  history: MatchRecord[];
+  /** dernier lancement de chaque mode (pour le temps de recharge) */
+  lastPlayed: Partial<Record<ModeId, number>>;
+  coins: number;
+  /** ids des joueurs débloqués (via les caisses) */
+  owned: string[];
 }
