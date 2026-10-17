@@ -364,6 +364,29 @@ main { padding: 28px 32px 48px; max-width: 1440px; margin: 0 auto; }
 .card.silver { background: linear-gradient(155deg, #dfe7f3, #a9b7cd 48%, #6f819e); color: #0e1626; }
 .card.gold { background: linear-gradient(155deg, #fbe3a1, #f0b93d 50%, #b9761a); color: #2b1c04; }
 .card.legend { background: linear-gradient(155deg, #c9b9ff, #7a5cff 45%, #2a3db5); color: #fff; }
+/* Icône : carte blanche nacrée, liseré doré, reflet qui balaie la carte */
+.card.icon {
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(255, 255, 255, 0.95), transparent 60%),
+    linear-gradient(155deg, #ffffff, #f1efe8 42%, #d9d4c6 78%, #c3bca9);
+  color: #1b1a17;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(214, 178, 94, 0.55), 0 0 22px rgba(255, 244, 214, 0.18);
+}
+.card.icon::before { border: 1.5px solid rgba(196, 154, 60, 0.75); }
+.card.icon::after {
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.85) 48%, rgba(255, 236, 190, 0.5) 52%, transparent 68%);
+  background-size: 260% 100%; animation: icon-shine 4.5s ease-in-out infinite;
+}
+.card.icon .team { color: #8a6a22; }
+.card.icon .stats b { color: #1b1a17; }
+.icon-tag {
+  position: absolute; top: 4px; left: 50%; transform: translateX(-50%); z-index: 2;
+  font-family: var(--font-display); font-weight: 800; font-size: 0.7rem; letter-spacing: 0.22em;
+  padding: 1px 10px 1px 12px; border-radius: 999px; color: #fff8e4;
+  background: linear-gradient(90deg, #b8892f, #e3c27a 50%, #b8892f);
+}
+@keyframes icon-shine { 0%, 55% { background-position: 130% 0; } 100% { background-position: -130% 0; } }
+@media (prefers-reduced-motion: reduce) { .card.icon::after { animation: none; } }
 
 .card-head { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; position: relative; z-index: 1; }
 .ovr { font-family: var(--font-display); font-size: 2.6rem; font-weight: 800; line-height: 0.95; grid-row: span 2; }
@@ -489,11 +512,13 @@ main { padding: 28px 32px 48px; max-width: 1440px; margin: 0 auto; }
 .odds-row.silver .odds-bar div { background: #a9b7cd; }
 .odds-row.gold .odds-bar div { background: var(--gold); }
 .odds-row.legend .odds-bar div { background: var(--violet); }
+.odds-row.icon .odds-bar div { background: linear-gradient(90deg, #fff, #e3c27a); }
 .pack { display: flex; flex-direction: column; }
 .pack .full { margin-top: auto; }
 .pack .odds { margin-bottom: 18px; }
 .odds-row.gold .odds-label { color: var(--gold-hi); }
 .odds-row.legend .odds-label { color: #b9a3ff; }
+.odds-row.icon .odds-label { color: #fff3d6; }
 
 /* Ouverture de caisse */
 .dialog-pack { width: min(760px, 94vw); overflow: hidden; }
@@ -515,15 +540,19 @@ main { padding: 28px 32px 48px; max-width: 1440px; margin: 0 auto; }
 .roll-item.silver { border-color: #a9b7cd; background: linear-gradient(180deg, var(--panel), rgba(169, 183, 205, 0.18)); }
 .roll-item.gold { border-color: var(--gold); background: linear-gradient(180deg, var(--panel), rgba(232, 168, 56, 0.22)); }
 .roll-item.legend { border-color: var(--violet); background: linear-gradient(180deg, var(--panel), rgba(155, 123, 255, 0.3)); }
+.roll-item.icon { border-color: #e3c27a; background: linear-gradient(180deg, #f6f3ea, #d9d4c6); color: #1b1a17; }
+.roll-item.icon small { color: #8a6a22; }
 
 .reveal { display: grid; justify-items: center; gap: 12px; padding: 8px 0; }
 .reveal-rarity { font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; }
 .reveal.silver .reveal-rarity { color: #a9b7cd; }
 .reveal.gold .reveal-rarity { color: var(--gold-hi); }
 .reveal.legend .reveal-rarity { color: #b9a3ff; }
+.reveal.icon .reveal-rarity { color: #fff3d6; text-shadow: 0 0 14px rgba(227, 194, 122, 0.8); }
 .reveal-card { width: 220px; animation: reveal-pop 0.6s cubic-bezier(0.2, 1.4, 0.3, 1) both; }
 .reveal.gold .reveal-card { filter: drop-shadow(0 0 22px rgba(232, 168, 56, 0.55)); }
 .reveal.legend .reveal-card { filter: drop-shadow(0 0 30px rgba(155, 123, 255, 0.75)); }
+.reveal.icon .reveal-card { filter: drop-shadow(0 0 34px rgba(255, 240, 200, 0.85)); }
 .reveal-status { margin: 0; }
 @keyframes reveal-pop { from { opacity: 0; transform: scale(0.6) rotate(-6deg); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .tab { transition: none; } .reveal-card, .match-result { animation: none; } .match-progress div { animation-duration: 0.01s !important; } .btn, .picker-card { transition: none; } }

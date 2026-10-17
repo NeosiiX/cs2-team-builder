@@ -91,15 +91,16 @@ const ROLES: Role[] = ['IGL', 'RIF', 'AWP', 'SUP', 'LRK'];
 
 /** Cinq joueurs (un par rôle) dont la note moyenne s'approche de `target`, sans prendre ceux de ton équipe. */
 export function buildOpponentRoster(all: Player[], mine: Player[], target: number, rng: Rng = Math.random): Player[] {
-  const taken = new Set(mine.map((p) => p.id));
+  // par pseudo : un joueur et sa carte Icône ne peuvent pas jouer dans le même match
+  const taken = new Set(mine.map((p) => p.nickname.toLowerCase()));
   const out: Player[] = [];
   for (const role of ROLES) {
-    let pool = all.filter((p) => p.role === role && !taken.has(p.id));
-    if (!pool.length) pool = all.filter((p) => !taken.has(p.id));
+    let pool = all.filter((p) => p.role === role && !taken.has(p.nickname.toLowerCase()));
+    if (!pool.length) pool = all.filter((p) => !taken.has(p.nickname.toLowerCase()));
     const goal = target + (rng() - 0.5) * 8;
     const w = pool.map((p) => Math.exp(-((p.ovr - goal) ** 2) / (2 * 5 * 5)) + 0.001);
     const pick = pool[weighted(w, rng)];
-    taken.add(pick.id);
+    taken.add(pick.nickname.toLowerCase());
     out.push(pick);
   }
   return out;

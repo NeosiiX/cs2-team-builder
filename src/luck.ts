@@ -8,10 +8,10 @@ import type { PackDef } from './packs';
  * - les % affichés à l'écran sont ceux réellement utilisés (voir effectiveOdds)
  */
 
-export const RARITIES: Rarity[] = ['legend', 'gold', 'silver'];
+export const RARITIES: Rarity[] = ['icon', 'legend', 'gold', 'silver'];
 
 /** Valeur de revente d'un doublon : toujours très inférieure au prix d'une caisse. */
-export const DUPLICATE_REFUND: Record<Rarity, number> = { silver: 25, gold: 80, legend: 300 };
+export const DUPLICATE_REFUND: Record<Rarity, number> = { silver: 25, gold: 80, legend: 300, icon: 500 };
 
 export type Rng = () => number;
 

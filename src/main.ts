@@ -91,6 +91,7 @@ function cardHTML(p: Player, fit: boolean | null): string {
       <div class="period">${fmtPeriod(p.period)}</div>
     </div>
     <div class="portrait">
+      ${p.rarity === 'icon' ? '<span class="icon-tag">ICÔNE</span>' : ''}
       <span class="initials">${initials}</span>
       <img src="/players/${esc(p.id)}.png" alt="" onerror="this.remove()" />
     </div>
@@ -283,7 +284,7 @@ function renderPacks() {
   view.innerHTML = `
     <div class="section-head">
       <h2>Caisses CS2</h2>
-      <span class="muted">Doublon revendu : 🪙 ${DUPLICATE_REFUND.silver} / ${DUPLICATE_REFUND.gold} / ${DUPLICATE_REFUND.legend} (Silver / Gold / Légende)</span>
+      <span class="muted">Doublon revendu : 🪙 ${DUPLICATE_REFUND.silver} / ${DUPLICATE_REFUND.gold} / ${DUPLICATE_REFUND.legend} / ${DUPLICATE_REFUND.icon} (Silver / Gold / Légende / Icône)</span>
     </div>
     <div class="pack-grid">${PACKS.map(packCardHTML).join('')}</div>`;
 }
@@ -925,10 +926,12 @@ function renderPickerList() {
   const used = new Set(
     Object.entries(save.team).filter(([k, v]) => v && k !== slot.id).map(([, v]) => v as string),
   );
+  // une même personne (carte de base ou Icône) ne peut être alignée qu'une fois
+  const usedNames = new Set([...used].map((id) => byId.get(id)?.nickname.toLowerCase()));
   const q = pickerQuery.toLowerCase();
   const list = players
     .filter((p) => isOwned(p.id))
-    .filter((p) => !used.has(p.id))
+    .filter((p) => !used.has(p.id) && !usedNames.has(p.nickname.toLowerCase()))
     .filter((p) => pickerRole === 'ALL' || p.role === pickerRole)
     .filter((p) => !q || p.nickname.toLowerCase().includes(q) || p.team.toLowerCase().includes(q))
     .sort((a, b) => Number(slot.role && b.role === slot.role) - Number(slot.role && a.role === slot.role) || b.ovr - a.ovr);

@@ -1,5 +1,5 @@
 export type Role = 'IGL' | 'RIF' | 'AWP' | 'SUP' | 'LRK';
-export type Rarity = 'silver' | 'gold' | 'legend';
+export type Rarity = 'silver' | 'gold' | 'legend' | 'icon';
 export type StatKey = 'aim' | 'utl' | 'pos' | 'clu';
 export type Stats = Record<StatKey, number>;
 
