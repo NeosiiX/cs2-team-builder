@@ -21,6 +21,16 @@ let save = loadSave();
 let activeTab = 'team';
 let pickerSlot: SlotId | null = null;
 
+/** Icônes des onglets (traits 24×24, style « outline »). */
+const TAB_ICONS: Record<string, string> = {
+  team: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18.5 14.3c1.9.8 3 2.9 3 5.7"/>',
+  play: '<circle cx="12" cy="12" r="8.5"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/><circle cx="12" cy="12" r="2"/>',
+  market: '<path d="M3 9.5 4.5 4h15L21 9.5"/><path d="M3 9.5h18v1a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13v7h14v-7"/>',
+  collection: '<rect x="3" y="6" width="12" height="15" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v13"/>',
+  packs: '<path d="M3 8.5 12 4l9 4.5v8L12 21l-9-4.5z"/><path d="m3 8.5 9 4.5 9-4.5M12 13v8"/>',
+  ranking: '<path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/>',
+};
+
 const TABS = [
   { id: 'team', label: 'My team', ready: true },
   { id: 'play', label: 'Play', ready: true },
@@ -173,10 +183,15 @@ function renderPlaceholder(label: string) {
 
 /* ---------- navigation ---------- */
 function renderTabs() {
-  tabsEl.innerHTML = TABS.map(
-    (t) => `<button class="tab ${t.id === activeTab ? 'active' : ''}" data-tab="${t.id}">
-      ${t.label}${t.ready ? '' : ' <small>bientôt</small>'}</button>`,
-  ).join('');
+  tabsEl.innerHTML = `<div class="tabs-dock" role="tablist">${TABS.map((t) => {
+    const on = t.id === activeTab;
+    return `<button class="tab ${on ? 'active' : ''} ${t.ready ? '' : 'soon'}" data-tab="${t.id}" role="tab" title="${t.label}" aria-selected="${on}"
+        ${on ? 'aria-current="page"' : ''}>
+        <svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true">${TAB_ICONS[t.id]}</svg>
+        <span>${t.label}</span>${t.ready ? '' : '<small>bientôt</small>'}
+      </button>`;
+  }).join('')}</div>`;
+  tabsEl.querySelector<HTMLElement>('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
 function renderAccountBtn() {
@@ -963,9 +978,13 @@ pickerDialog.addEventListener('click', (e) => {
 /* ---------- événements globaux ---------- */
 tabsEl.addEventListener('click', (e) => {
   const tab = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]');
-  if (!tab || !save.profile) return;
+  if (!tab || !save.profile || tab.dataset.tab === activeTab) return;
   activeTab = tab.dataset.tab!;
-  render();
+  // fondu enchaîné entre les onglets quand le navigateur le permet (View Transitions)
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (doc.startViewTransition && !reduce) doc.startViewTransition(() => render());
+  else render();
 });
 
 view.addEventListener('click', (e) => {
