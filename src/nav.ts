@@ -47,6 +47,9 @@ export interface PathPt extends Vec {
   area?: number;
 }
 
+/** Fente tolérée entre deux polygones voisins sur une ligne droite (px radar) : au-delà, c'est un mur. */
+const GAP_TOL = 1.2;
+
 export class Nav {
   readonly areas: Area[];
   readonly n: number;
@@ -251,7 +254,7 @@ export class Nav {
    * Le segment a→b reste-t-il sur le maillage, sans saut de hauteur (pas de raccourci à travers un mur,
    * ni par-dessus le vide, ni d'un étage à l'autre) ? Renvoie la zone d'arrivée, ou -1.
    */
-  straight(a: Vec, b: Vec, area: number): number {
+  straight(a: Vec, b: Vec, area: number, tol = GAP_TOL): number {
     const len = Math.hypot(b.x - a.x, b.y - a.y);
     const steps = Math.max(1, Math.ceil(len / 2));
     let h = area;
@@ -261,13 +264,52 @@ export class Nav {
       const k = this.locate(q, h);
       if (k < 0) {
         // les polygones du maillage ne se touchent pas parfaitement : fente de moins de 3 px tolérée
-        if (this.gap(q, h) > 3) return -1;
+        if (this.gap(q, h) > tol) return -1;
         continue;
       }
       if (h >= 0 && k !== h && !this.canPass(h, k, q)) return -1;
       h = k;
     }
     return h;
+  }
+
+  /** Distance libre (px) en marchant tout droit depuis `p` dans la direction `ang`, jusqu'à `max`. */
+  freeRun(p: Vec, area: number, ang: number, max = 120): number {
+    const dx = Math.cos(ang) * 3;
+    const dy = Math.sin(ang) * 3;
+    let h = area;
+    let q = p;
+    for (let d = 3; d <= max; d += 3) {
+      q = { x: q.x + dx, y: q.y + dy };
+      const k = this.locate(q, h);
+      if (k < 0) {
+        // pour le regard, une fente entre deux polygones (rebord, marche) ne bouche pas la vue ; un mur, si
+        if (this.gap(q, h) > 4) return d - 3;
+        continue;
+      }
+      // un sol nettement plus haut devant soi (muret, caisse, étage) bouche la vue ; un escalier ou un sol plus bas non
+      if (h >= 0 && k !== h && this.zAt(k, q) - this.zAt(h, q) > 40 && !this.linked(h, k)) return d - 3;
+      h = k;
+    }
+    return max;
+  }
+
+  /**
+   * Direction de regard depuis `p` : la plus proche de `want` (d'où viendra l'ennemi) parmi celles qui ne donnent
+   * pas sur un mur tout proche. On évite ainsi les joueurs qui fixent un mur.
+   */
+  openAngle(p: Vec, area: number, want: number): number {
+    if (area < 0) return want;
+    let best = want;
+    let score = -Infinity;
+    for (let i = 0; i < 24; i++) {
+      const ang = want + ((i % 2 ? 1 : -1) * Math.ceil(i / 2) * Math.PI) / 12;
+      const free = this.freeRun(p, area, ang);
+      const diff = Math.abs(Math.atan2(Math.sin(ang - want), Math.cos(ang - want)));
+      const sc = Math.min(free, 90) / 90 * 1.4 + Math.cos(diff) - (free < 35 ? 2 : 0);
+      if (sc > score) { score = sc; best = ang; }
+    }
+    return best;
   }
 
   /** Hauteur du sol au point `p` de la zone `i` (interpolée entre les coins). */
@@ -340,9 +382,15 @@ export class Nav {
     for (let i = 0; i < 30; i++) {
       const p = { x: r.x + margin + rng() * Math.max(1, r.w - 2 * margin), y: r.y + margin + rng() * Math.max(1, r.h - 2 * margin) };
       const a = this.locate(p);
-      if (a >= 0) return { p, area: a };
+      if (a >= 0 && (this.roomy(a) || i > 20)) return { p, area: a };
     }
     return this.snap({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+  }
+
+  /** Zone assez large pour s'y poster (pas un rebord ou une marche de 2 px). */
+  roomy(i: number): boolean {
+    const b = this.areas[i].box;
+    return b[2] - b[0] >= 5 && b[3] - b[1] >= 5;
   }
 
   /** Point au hasard proche de `p`, à peu près au même étage. */
@@ -351,7 +399,7 @@ export class Nav {
     for (let i = 0; i < 14; i++) {
       const q = { x: p.x + (rng() - 0.5) * 2 * radius, y: p.y + (rng() - 0.5) * 2 * radius };
       const a = this.locate(q, area, z);
-      if (a >= 0 && (z === undefined || Math.abs(this.areas[a].z - z) < 70)) return { p: q, area: a };
+      if (a >= 0 && (z === undefined || Math.abs(this.areas[a].z - z) < 70) && this.roomy(a)) return { p: q, area: a };
     }
     return { p: { ...p }, area };
   }

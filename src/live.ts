@@ -333,7 +333,7 @@ export class LiveMatch {
   private watchFrom(p: Vec, from: Vec): number {
     const path = this.pathTo(p, from);
     const q = path.find((x) => dist(x, p) > 30) ?? path[0] ?? from;
-    return Math.atan2(q.y - p.y, q.x - p.x);
+    return this.nav.openAngle(p, this.areaOf(p, -1), Math.atan2(q.y - p.y, q.x - p.x));
   }
 
   /** Rayon actuel d'un fumigène (0 en vol, grossit à l'atterrissage, se dissipe à la fin). */
@@ -1125,7 +1125,9 @@ export class LiveMatch {
   }
 
   /* ---------- déplacements ---------- */
+  private moveTick = 0;
   private move(dt: number) {
+    this.moveTick++;
     const TURN = 9; // rad/s : coins arrondis
     const ACCEL = 170;
     for (const u of this.units) {
@@ -1148,24 +1150,42 @@ export class LiveMatch {
       u.v += Math.max(-ACCEL * 2.5 * dt, Math.min(ACCEL * dt, (moving ? u.speed : 0) - u.v));
 
       if (moving) {
-        const to = u.path[0];
-        u.heading = turnToward(u.heading, Math.atan2(to.y - u.pos.y, to.x - u.pos.x), TURN * dt);
-        const step = u.v * dt;
-        const d = dist(u.pos, to);
-        if (u.path.length > 1 && d <= Math.max(step, to.anchor || u.path[1]?.jump ? 0.5 : 10)) {
-          if (to.anchor) { u.pos = { x: to.x, y: to.y }; if (to.area !== undefined) u.area = to.area; }
-          u.path.shift();
+        // on consomme exactement la distance du pas le long du trajet (jamais de saut de position) :
+        // le reste du pas continue sur le segment suivant
+        let step = u.v * dt;
+        while (step > 1e-6 && u.path.length) {
+          const to = u.path[0];
+          const d = dist(u.pos, to);
+          if (d <= step) {
+            u.pos = { x: to.x, y: to.y };
+            if (to.area !== undefined) u.area = to.area;
+            else this.follow(u);
+            step -= d;
+            u.path.shift();
+            if (!u.path.length) {
+              if (u.task === 'move') u.task = 'hold';
+              // arrivé : on recale le regard pour ne pas fixer un mur depuis la position réelle
+              u.watch = this.nav.openAngle(u.pos, u.area, u.watch);
+            }
+          } else {
+            const k = step / d;
+            u.pos = { x: u.pos.x + (to.x - u.pos.x) * k, y: u.pos.y + (to.y - u.pos.y) * k };
+            this.follow(u);
+            step = 0;
+          }
         }
-        else if (u.path.length === 1 && d <= Math.max(step, 3)) {
-          u.pos = { ...to };
-          u.area = this.areaOf(u.pos, u.area);
-          u.path.shift();
-          if (u.task === 'move') u.task = 'hold';
-        } else this.advance(u, step);
+        // l'orientation du corps suit la marche, en arrondissant les virages (visuel seulement)
+        const nx = u.path[0];
+        if (nx && dist(u.pos, nx) > 0.5) u.heading = turnToward(u.heading, Math.atan2(nx.y - u.pos.y, nx.x - u.pos.x), TURN * dt);
       }
 
       // regard : la cible (géré par le combat) > la marche > la direction surveillée
       if (u.target < 0) {
+        // à l'arrêt, la direction surveillée ne doit jamais donner sur un mur tout proche (vérifié régulièrement :
+        // le poste réel peut différer de celui prévu)
+        if (!u.path.length && (this.moveTick + u.idx) % 10 === 0 && this.nav.freeRun(u.pos, u.area, u.watch, 40) < 30) {
+          u.watch = this.nav.openAngle(u.pos, u.area, u.watch);
+        }
         const running = u.v > 18;
         u.angle = turnToward(u.angle, running ? u.heading : u.watch, (running ? 6 : 3) * dt);
       }
@@ -1180,43 +1200,25 @@ export class LiveMatch {
         if (!b.alive || b.team !== a.team) continue;
         const d = dist(a.pos, b.pos);
         if (d >= 20 || d < 0.01 || Math.abs(this.zOf(a) - this.zOf(b)) > 90) continue;
-        const push = ((20 - d) / 2) * Math.min(1, dt * 8);
+        // on s'écarte doucement (au plus ~25 px/s) : jamais de saut visible
+        const push = Math.min(((20 - d) / 2) * Math.min(1, dt * 8), 25 * dt);
         const nx = (a.pos.x - b.pos.x) / d;
         const ny = (a.pos.y - b.pos.y) / d;
         const pa = { x: a.pos.x + nx * push, y: a.pos.y + ny * push };
         const pb = { x: b.pos.x - nx * push, y: b.pos.y - ny * push };
-        const za = this.nav.locate(pa, a.area);
-        const zb = this.nav.locate(pb, b.area);
+        // la poussée ne doit jamais faire traverser un mur ni changer d'étage
+        const za = this.nav.locate(pa, a.area) >= 0 ? this.nav.straight(a.pos, pa, a.area, 0.5) : -1;
+        const zb = this.nav.locate(pb, b.area) >= 0 ? this.nav.straight(b.pos, pb, b.area, 0.5) : -1;
         if (za >= 0 && a.task !== 'plant' && a.task !== 'defuse') { a.pos = pa; a.area = za; }
         if (zb >= 0 && b.task !== 'plant' && b.task !== 'defuse') { b.pos = pb; b.area = zb; }
       }
     }
   }
 
-  /** Avance dans la direction de marche sans traverser un mur (glisse le long sinon). */
-  /**
-   * Avance le long du trajet. Les trajets sont validés à leur calcul (liaisons du maillage, lignes droites vérifiées,
-   * jamais d'un étage à l'autre) : on les suit fidèlement, en arrondissant à peine les virages. La zone du joueur
-   * (donc sa hauteur) suit sa position, sans jamais sauter vers un étage non relié.
-   */
-  private advance(u: Unit, step: number) {
-    const to = u.path[0];
-    if (!to) { u.v = 0; return; }
-    const d = dist(u.pos, to);
-    const want = Math.atan2(to.y - u.pos.y, to.x - u.pos.x);
-    let q: Vec;
-    if (to.jump || to.anchor || angleDiff(u.heading, want) > 0.5 || d < 6) {
-      // point exact, virage serré ou arrivée : tout droit vers le point
-      const k = Math.min(1, step / Math.max(d, 1e-6));
-      q = { x: u.pos.x + (to.x - u.pos.x) * k, y: u.pos.y + (to.y - u.pos.y) * k };
-      u.heading = want;
-    } else {
-      q = { x: u.pos.x + Math.cos(u.heading) * step, y: u.pos.y + Math.sin(u.heading) * step };
-    }
-    u.pos = q;
-    const a = this.nav.locate(q, u.area);
-    if (a >= 0 && (a === u.area || this.nav.canPass(u.area, a, q))) u.area = a;
-    if (to.jump && dist(u.pos, to) < 0.01 && to.area !== undefined) u.area = to.area;
+  /** La zone du joueur (donc sa hauteur) suit sa position, sans jamais sauter vers un étage non relié. */
+  private follow(u: Unit) {
+    const a = this.nav.locate(u.pos, u.area);
+    if (a >= 0 && (a === u.area || this.nav.canPass(u.area, a, u.pos))) u.area = a;
   }
 
   /* ---------- fin de manche ---------- */

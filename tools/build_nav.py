@@ -72,6 +72,31 @@ def build(key, name):
             'z': round(ar['centroid'][2], 1),
         })
 
+    to_world = lambda rx, ry: (rx * scale + pos_x, pos_y - ry * scale)
+    def z_corner(i, p):
+        cs = areas[i]['corners']
+        w = z = 0.0
+        for c in cs:
+            rx, ry = to_radar(c[0], c[1])
+            d = (rx - p[0]) ** 2 + (ry - p[1]) ** 2
+            if d < 1e-6:
+                return c[2]
+            w += 1 / d; z += c[2] / d
+        return z / w
+    def clear(i, a, j, b):
+        """Le franchissement a→b (vide entre deux zones) ne traverse pas de mur : rayon à hauteur de genou ou de
+        poitrine dans le maillage de collision. Sans ça, une liaison du jeu (souvent un saut) ferait passer à travers."""
+        if math.hypot(b[0] - a[0], b[1] - a[1]) <= 1.0:
+            return True
+        wa, wb = to_world(*a), to_world(*b)
+        za, zb = z_corner(i, a), z_corner(j, b)
+        top = max(za, zb)
+        for h in (24.0, 48.0):
+            if vis.is_visible((wa[0], wa[1], max(za + h, top + 8)), (wb[0], wb[1], max(zb + h, top + 8))):
+                return True
+        return False
+    blocked = 0
+
     # liaisons orientées (+ échelles, dans les deux sens)
     for i, ar in enumerate(areas):
         links = []
@@ -83,6 +108,9 @@ def build(key, name):
             (ax, ay), (bx, by) = portal(polys2d[i], polys2d[j])
             if math.hypot(bx - ax, by - ay) > 40:
                 continue  # liaison spéciale très lointaine (téléport, échelle mal placée) : ignorée
+            if mult == 1.0 and not clear(i, (ax, ay), j, (bx, by)):
+                blocked += 1
+                continue  # le passage traverse un mur
             ci, cj = out_areas[i]['c'], out_areas[j]['c']
             cost = (math.hypot(ax - ci[0], ay - ci[1]) + math.hypot(bx - ax, by - ay) + math.hypot(cj[0] - bx, cj[1] - by)) * mult
             links.append([j, round(cost, 1), round(ax, 1), round(ay, 1), round(bx, 1), round(by, 1)])
@@ -107,6 +135,8 @@ def build(key, name):
         (ax, ay), (bx, by) = portal(polys2d[i], polys2d[j])
         if math.hypot(bx - ax, by - ay) > max_gap or abs(z_at(i, (ax, ay)) - z_at(j, (bx, by))) > 20:
             return False
+        if not clear(i, (ax, ay), j, (bx, by)):
+            return False
         ci, cj = out_areas[i]['c'], out_areas[j]['c']
         cost = math.hypot(ax - ci[0], ay - ci[1]) + math.hypot(bx - ax, by - ay) + math.hypot(cj[0] - bx, cj[1] - by)
         out_areas[i]['l'].append([j, round(cost, 1), round(ax, 1), round(ay, 1), round(bx, 1), round(by, 1)])
@@ -123,6 +153,7 @@ def build(key, name):
             if bi[0] > bj[2] + 1 or bj[0] > bi[2] + 1 or bi[1] > bj[3] + 1 or bj[1] > bi[3] + 1:
                 continue
             added += add_link(i, j, 1.0) + add_link(j, i, 1.0)  # contact : bords qui se touchent (< 4 unités)
+    print(f'{key}: {blocked} liaisons à travers un mur retirées')
     print(f'{key}: {added} liaisons ajoutées (retours et contacts de plain-pied)')
 
     # visibilité : centre → centre à hauteur des yeux ; pour les grandes zones, quelques points de plus
